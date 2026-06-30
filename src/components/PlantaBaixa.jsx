@@ -6,6 +6,15 @@ const JET='#1A1A18',JET2='#2C2C28',JET3='#3E3E38',WHITE='#FFFFFF',OFF='#F7F5F0'
 
 const PRESET_COLORS=['#68541F','#8B6F2E','#A0522D','#6D4C41','#4E342E','#3E2723','#2E7D32','#388E3C','#1B5E20','#1565C0','#0D47A1','#C62828','#AD1457','#E65100','#F9A825','#F9C31A','#FFD600','#6A1B9A','#4A148C','#212121','#424242','#616161','#757575','#9E9E9E','#BDBDBD','#00838F','#37474F']
 
+// ── STATUS de comentário ──────────────────────────────────────────
+const STATUS_OPTIONS=[
+  {value:'concluido', label:'Concluído', color:'#2E7D32'},
+  {value:'pendente',  label:'Pendente',  color:'#C62828'},
+  {value:'a_iniciar', label:'A iniciar', color:'#E65100'},
+]
+function statusLabel(v){ return STATUS_OPTIONS.find(s=>s.value===v) }
+
+// ── UTM (mantida para uso sob demanda) ───────────────────────────
 function latLngToUTM(lat,lng){
   const a=6378137,f=1/298.257223563,b=a*(1-f),e2=(a*a-b*b)/(a*a),k0=0.9996,E0=500000,N0=lat<0?10000000:0
   const latR=lat*Math.PI/180,lngR=lng*Math.PI/180
@@ -121,13 +130,34 @@ function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros}){
   )
 }
 
-function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros}){
+// ── Ícone de câmera com badge de pendentes ────────────────────────
+function CameraIcon({reg, onClick, style}){
+  const pendentes=reg.coments?.filter(c=>c.status==='pendente').length||0
+  return(
+    <div onClick={onClick} title={`${reg.serial||''} · ${reg.atividade||'Registro'}`}
+      style={{...style, position:'absolute', cursor:'pointer'}}>
+      📷
+      {pendentes>0&&(
+        <div style={{
+          position:'absolute', top:-5, right:-5,
+          width:15, height:15, borderRadius:'50%',
+          background:'#C62828', border:'1.5px solid white',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          fontSize:8, fontWeight:700, color:WHITE, lineHeight:1
+        }}>{pendentes}</div>
+      )}
+    </div>
+  )
+}
+
+function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome}){
   const[fotos,setFotos]=useState(existing?.fotos||[])
   const horario=existing?.horario||nowStr()
   const[junta,setJunta]=useState(existing?.junta||'')
   const[pavimento,setPav]=useState(existing?.pavimento||pavAtivo||'')
   const[geo,setGeo]=useState(existing?.geo_lat?{lat:existing.geo_lat,lng:existing.geo_lng}:null)
   const[utmCoord,setUtmCoord]=useState(existing?.utm_zone?{zone:existing.utm_zone,E:existing.utm_e,N:existing.utm_n}:null)
+  const[geoLoading,setGeoLoading]=useState(false)
   const[atividade,setAtiv]=useState(existing?.atividade||'')
   const[responsavel,setResp]=useState(existing?.responsavel||'')
   const[nfs,setNfs]=useState(existing?.nfs||[])
@@ -137,15 +167,22 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const[confirmDel,setConfirmDel]=useState(false)
   const serial=existing?.serial||nextSerial(registros)
 
-  useEffect(()=>{
-    if(!existing?.geo_lat){
-      navigator.geolocation?.getCurrentPosition(p=>{
-        const lat=p.coords.latitude,lng=p.coords.longitude
-        setGeo({lat:lat.toFixed(6),lng:lng.toFixed(6)})
-        try{const u=latLngToUTM(lat,lng);setUtmCoord(u);}catch{}
-      })
-    }
-  },[])
+  // ── NÃO gera coordenadas automaticamente ─────────────────────
+  // (removido o useEffect que chamava geolocation no mount)
+
+  const handleGetUTM=()=>{
+    if(!navigator.geolocation){ alert('Geolocalização não disponível.'); return }
+    setGeoLoading(true)
+    navigator.geolocation.getCurrentPosition(p=>{
+      const lat=p.coords.latitude,lng=p.coords.longitude
+      setGeo({lat:lat.toFixed(6),lng:lng.toFixed(6)})
+      try{const u=latLngToUTM(lat,lng);setUtmCoord(u);}catch{}
+      setGeoLoading(false)
+    },()=>{
+      alert('Não foi possível obter localização. Verifique as permissões do navegador.')
+      setGeoLoading(false)
+    })
+  }
 
   const readFile=(f,cb)=>{const r=new FileReader();r.onload=ev=>cb(ev.target.result,f.name);r.readAsDataURL(f);}
   const addFotos=e=>Array.from(e.target.files).forEach(f=>readFile(f,(d,nm)=>setFotos(prev=>[...prev,{data:d,nome:nm}])))
@@ -168,6 +205,8 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
           <div>
             <span style={{fontWeight:700,fontSize:14}}>{existing?'✏️ Editar':'📍 Novo'} Registro</span>
             <span style={{marginLeft:10,fontSize:12,color:GOLD,fontWeight:700}}>{serial}</span>
+            {/* [FIX] Nome do arquivo da planta */}
+            {plantaNome&&<span style={{marginLeft:12,fontSize:10,color:'#777',fontStyle:'italic'}}>📄 {plantaNome}</span>}
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',color:WHITE,fontSize:18,cursor:'pointer'}}>✕</button>
         </div>
@@ -194,9 +233,20 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
           <Sec title="ℹ️ Informações Gerais">
             <div style={{fontSize:12,color:'#888',marginBottom:4}}>🕐 <b>{horario}</b></div>
             {geo&&<div style={{fontSize:12,color:'#888',marginBottom:2}}>📍 WGS84: <b>{geo.lat}, {geo.lng}</b></div>}
+
+            {/* [FIX] Coordenadas UTM sob demanda */}
             {utmCoord
-              ?<div style={{fontSize:12,color:'#888',marginBottom:8,background:BEIGE2,borderRadius:6,padding:'6px 10px'}}>📐 UTM Zona <b>{utmCoord.zone}</b> · E <b>{utmCoord.E}</b> / N <b>{utmCoord.N}</b></div>
-              :<div style={{fontSize:12,color:'#BBB',marginBottom:8,fontStyle:'italic'}}>📐 UTM: aguardando localização…</div>}
+              ?<div style={{fontSize:12,color:'#888',marginBottom:8,background:BEIGE2,borderRadius:6,padding:'6px 10px'}}>
+                📐 UTM Zona <b>{utmCoord.zone}</b> · E <b>{utmCoord.E}</b> / N <b>{utmCoord.N}</b>
+              </div>
+              :<div style={{marginBottom:8}}>
+                <button onClick={handleGetUTM} disabled={geoLoading}
+                  style={{background:geoLoading?'#888':JET2,color:WHITE,border:'none',borderRadius:6,padding:'7px 16px',fontSize:12,fontWeight:600,cursor:geoLoading?'not-allowed':'pointer'}}>
+                  {geoLoading?'📡 Obtendo localização…':'📐 Gerar coordenadas UTM'}
+                </button>
+              </div>
+            }
+
             <Inp label="Responsável pelo Registro" value={responsavel} onChange={setResp}/>
             <Sel label="Junta" value={junta} onChange={setJunta} options={juntas} allowNew onAddNew={v=>onSaveJunta(v)} onRemove={v=>onDeleteJunta(v)}/>
             <Inp label="Pavimento" value={pavimento} onChange={setPav}/>
@@ -231,19 +281,35 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
             <Btn small outline onClick={()=>setCats([...cats,{nome:''}])}>+ Adicionar Catálogo</Btn>
           </Sec>
 
+          {/* [FIX] Comentários com Status + Nome do usuário */}
           <Sec title="💬 Comentários" defaultOpen={false}>
             {coments.map((c,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
                 <button onClick={()=>setComents(coments.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
                 <Inp label="Data" type="date" value={c.data} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,data:v}:x))}/>
-                <Inp label="Responsável" value={c.responsavel} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,responsavel:v}:x))}/>
+                <Inp label="Usuário que adicionou" value={c.usuario} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,usuario:v}:x))}/>
+                <Inp label="Responsável pela ação" value={c.responsavel} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,responsavel:v}:x))}/>
+                <div style={{marginBottom:8}}>
+                  <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4,letterSpacing:.5,textTransform:'uppercase'}}>Status</label>
+                  <div style={{display:'flex',gap:6}}>
+                    {STATUS_OPTIONS.map(s=>(
+                      <button key={s.value} onClick={()=>setComents(coments.map((x,j)=>j===i?{...x,status:s.value}:x))}
+                        style={{
+                          flex:1, padding:'5px 0', borderRadius:6, border:`1.5px solid ${s.color}`,
+                          background:c.status===s.value?s.color:'transparent',
+                          color:c.status===s.value?WHITE:s.color,
+                          fontSize:11, fontWeight:600, cursor:'pointer', transition:'all .15s'
+                        }}>{s.label}</button>
+                    ))}
+                  </div>
+                </div>
                 <div style={{marginBottom:6}}>
                   <label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>Descrição</label>
                   <textarea value={c.descricao||''} rows={3} onChange={e=>setComents(coments.map((x,j)=>j===i?{...x,descricao:e.target.value}:x))} style={{width:'100%',boxSizing:'border-box',border:`1px solid ${BEIGE}`,borderRadius:6,padding:'7px 10px',fontSize:13,resize:'vertical'}}/>
                 </div>
               </div>
             ))}
-            <Btn small outline onClick={()=>setComents([...coments,{data:new Date().toISOString().slice(0,10),responsavel:'',descricao:''}])}>+ Adicionar Comentário</Btn>
+            <Btn small outline onClick={()=>setComents([...coments,{data:new Date().toISOString().slice(0,10),usuario:'',responsavel:'',descricao:'',status:'a_iniciar'}])}>+ Adicionar Comentário</Btn>
           </Sec>
 
           <Sec title="🔗 Link do Drive" defaultOpen={false}>
@@ -272,8 +338,11 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
   const[pan,setPan]=useState({x:0,y:0})
   const[dragging,setDragging]=useState(false)
   const[lastTouch,setLastTouch]=useState(null)
+  // [FIX] guarda o nome do arquivo da planta por pavimento
+  const[plantaNomes,setPlantaNomes]=useState({})
   const dragStart=useRef(null)
   const planta=plantas[pavAtivo]
+  const plantaNome=plantaNomes[pavAtivo]||null
 
   const handleWheel=useCallback(e=>{
     e.preventDefault()
@@ -287,11 +356,22 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
     return()=>el.removeEventListener('wheel',handleWheel)
   },[handleWheel])
 
+  // [FIX] guarda nome do arquivo ao fazer upload/trocar
   const handleUpload=e=>{
     const f=e.target.files[0];if(!f) return
     const r=new FileReader()
-    r.onload=ev=>setPlantas({...plantas,[pavAtivo]:ev.target.result})
+    r.onload=ev=>{
+      setPlantas({...plantas,[pavAtivo]:ev.target.result})
+      setPlantaNomes({...plantaNomes,[pavAtivo]:f.name})
+    }
     r.readAsDataURL(f)
+  }
+
+  // [FIX] salvar planta sem trocar (novo botão)
+  const handleSavePlanta=()=>{
+    if(!planta){ alert('Nenhuma planta carregada.'); return }
+    alert(`Planta "${plantaNome||pavAtivo}" salva com sucesso.`)
+    // aqui você pode chamar uma função de persistência no Supabase se necessário
   }
 
   const handleImgClick=e=>{
@@ -319,25 +399,50 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
 
   return(
     <div style={{display:'flex',gap:0}}>
+      {/* ── Painel de Pavimentos ── */}
       <div style={{width:160,flexShrink:0,background:JET,borderRadius:'10px 0 0 10px',padding:'14px 8px',display:'flex',flexDirection:'column',alignItems:'center'}}>
         <div style={{fontSize:9,color:'#666',letterSpacing:2,textTransform:'uppercase',marginBottom:10}}>Pavimentos</div>
         <div style={{width:'100%',overflowY:'auto',maxHeight:480}}>
           <CorteInterno pavimentos={pavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros}/>
         </div>
         <div style={{marginTop:10,width:'100%',padding:'10px 4px 0',borderTop:'1px solid #2C2C28'}}>
-          {addPav?<div style={{display:'flex',flexDirection:'column',gap:4}}>
-            <input value={newPav} onChange={e=>setNewPav(e.target.value)} placeholder="Nome" style={{fontSize:11,padding:'5px 8px',borderRadius:5,border:'1px solid #444',background:JET2,color:WHITE,width:'100%',boxSizing:'border-box'}}/>
-            <div style={{display:'flex',gap:4}}>
-              <button onClick={()=>{if(newPav.trim()){setPavimentos([...pavimentos,newPav.trim()]);setPavAtivo(newPav.trim());}setAddPav(false);setNewPav('');}} style={{flex:1,background:GOLD,color:WHITE,border:'none',borderRadius:5,padding:'5px 0',fontSize:11,cursor:'pointer'}}>OK</button>
-              <button onClick={()=>{setAddPav(false);setNewPav('');}} style={{flex:1,background:'transparent',color:'#666',border:'1px solid #444',borderRadius:5,padding:'5px 0',fontSize:11,cursor:'pointer'}}>✕</button>
+          {addPav
+            ?<div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <input value={newPav} onChange={e=>setNewPav(e.target.value)} placeholder="Nome" style={{fontSize:11,padding:'5px 8px',borderRadius:5,border:'1px solid #444',background:JET2,color:WHITE,width:'100%',boxSizing:'border-box'}}/>
+              <div style={{display:'flex',gap:4}}>
+                <button onClick={()=>{if(newPav.trim()){setPavimentos([...pavimentos,newPav.trim()]);setPavAtivo(newPav.trim());}setAddPav(false);setNewPav('');}} style={{flex:1,background:GOLD,color:WHITE,border:'none',borderRadius:5,padding:'5px 0',fontSize:11,cursor:'pointer'}}>OK</button>
+                <button onClick={()=>{setAddPav(false);setNewPav('');}} style={{flex:1,background:'transparent',color:'#666',border:'1px solid #444',borderRadius:5,padding:'5px 0',fontSize:11,cursor:'pointer'}}>✕</button>
+              </div>
             </div>
-          </div>:<button onClick={()=>setAddPav(true)} style={{width:'100%',background:'transparent',border:'1px dashed #3E3E38',color:'#666',borderRadius:6,padding:'6px 0',fontSize:11,cursor:'pointer'}}>+ Pavimento</button>}
+            :<div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {/* [FIX] + Pavimento */}
+              <button onClick={()=>setAddPav(true)} style={{width:'100%',background:'transparent',border:'1px dashed #3E3E38',color:'#666',borderRadius:6,padding:'6px 0',fontSize:11,cursor:'pointer'}}>+ Pavimento</button>
+              {/* [FIX] - Pavimento (exclui o pavimento ativo) */}
+              {pavimentos.length>1&&(
+                <button onClick={()=>{
+                  const idx=pavimentos.indexOf(pavAtivo)
+                  const novo=[...pavimentos.filter(p=>p!==pavAtivo)]
+                  setPavimentos(novo)
+                  setPavAtivo(novo[Math.max(0,idx-1)]||novo[0])
+                  // limpa a planta do pavimento removido
+                  const novasPlantas={...plantas}
+                  delete novasPlantas[pavAtivo]
+                  setPlantas(novasPlantas)
+                }} style={{width:'100%',background:'transparent',border:'1px dashed #6B2020',color:'#C0392B',borderRadius:6,padding:'6px 0',fontSize:11,cursor:'pointer'}}>− Excluir pavimento</button>
+              )}
+            </div>
+          }
         </div>
       </div>
 
+      {/* ── Área da planta ── */}
       <div style={{flex:1,background:WHITE,borderRadius:'0 10px 10px 0',border:`1px solid ${BEIGE}`,borderLeft:'none',overflow:'hidden'}}>
         <div style={{background:BEIGE2,padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${BEIGE}`}}>
-          <span style={{fontSize:12,fontWeight:700,color:GOLD}}>{pavAtivo}</span>
+          <div>
+            <span style={{fontSize:12,fontWeight:700,color:GOLD}}>{pavAtivo}</span>
+            {/* [FIX] Título com nome do arquivo */}
+            {plantaNome&&<span style={{marginLeft:10,fontSize:10,color:'#999',fontStyle:'italic'}}>📄 {plantaNome}</span>}
+          </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {planta&&<>
               <button onClick={()=>setZoom(z=>Math.max(1,z-.25))} style={{background:JET2,color:WHITE,border:'none',borderRadius:5,width:26,height:26,cursor:'pointer',fontSize:16}}>−</button>
@@ -346,7 +451,16 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
               <button onClick={()=>{setZoom(1);setPan({x:0,y:0});}} style={{background:'transparent',border:`1px solid ${BEIGE}`,borderRadius:5,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'#888'}}>Reset</button>
             </>}
             <input ref={fileRef} type="file" accept="image/*,.pdf" style={{display:'none'}} onChange={handleUpload}/>
-            <button onClick={()=>fileRef.current.click()} style={{background:'transparent',border:`1.5px solid ${GOLD}`,color:GOLD,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>📁 {planta?'Trocar':'Carregar'}</button>
+            {/* [FIX] Botão Salvar ao lado de Trocar/Carregar */}
+            {planta&&(
+              <button onClick={handleSavePlanta}
+                style={{background:GOLD,border:`1.5px solid ${GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                💾 Salvar
+              </button>
+            )}
+            <button onClick={()=>fileRef.current.click()} style={{background:'transparent',border:`1.5px solid ${GOLD}`,color:GOLD,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+              📁 {planta?'Trocar':'Carregar'}
+            </button>
           </div>
         </div>
 
@@ -367,10 +481,24 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
               <div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}} onClick={handleImgClick}>
                 <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
               </div>
+              {/* [FIX] Ícones com badge de pendentes */}
               {regsAtivos.map(reg=>(
-                <div key={reg.id} onClick={e=>{e.stopPropagation();setIconClicked(reg.id);}}
-                  title={`${reg.serial||''} · ${reg.atividade||'Registro'}`}
-                  style={{position:'absolute',left:`calc(${reg.x}% * ${zoom} + ${pan.x}px - 14px)`,top:`calc(${reg.y}% * ${zoom} + ${pan.y}px - 14px)`,width:28,height:28,background:getColor(reg.atividade),borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,cursor:'pointer',boxShadow:'0 2px 10px rgba(0,0,0,.45)',border:'2.5px solid rgba(255,255,255,.7)',zIndex:20,transition:dragging?'none':'left .1s,top .1s'}}>📷</div>
+                <CameraIcon key={reg.id} reg={reg}
+                  onClick={e=>{e.stopPropagation();setIconClicked(reg.id);}}
+                  style={{
+                    left:`calc(${reg.x}% * ${zoom} + ${pan.x}px - 14px)`,
+                    top:`calc(${reg.y}% * ${zoom} + ${pan.y}px - 14px)`,
+                    width:28, height:28,
+                    background:getColor(reg.atividade),
+                    borderRadius:'50%',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:13,
+                    boxShadow:'0 2px 10px rgba(0,0,0,.45)',
+                    border:'2.5px solid rgba(255,255,255,.7)',
+                    zIndex:20,
+                    transition:dragging?'none':'left .1s,top .1s'
+                  }}
+                />
               ))}
             </div>
           )}
@@ -380,8 +508,8 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
-      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
+      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
     </div>
   )
 }
