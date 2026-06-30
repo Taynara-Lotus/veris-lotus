@@ -16,6 +16,20 @@ const PAVIMENTOS_DEFAULT=[
   '13º Pavimento','14º Pavimento','15º Pavimento','Cobertura',
 ]
 
+// ── Contador de serial global — resetável ─────────────────────────
+let _serial = 0
+
+export function resetSerialCounter() {
+  _serial = 0
+}
+
+export function nextSerial(existing = []) {
+  const nums = existing.map(r => parseInt(r.serial?.replace('#', '') || '0') || 0)
+  const max = nums.length ? Math.max(...nums) : _serial
+  _serial = max + 1
+  return '#' + String(_serial).padStart(6, '0')
+}
+
 function LotusLogo({size=28,color=WHITE}){
   return(
     <svg height={size} width={size*3.6} viewBox="0 0 216 60" xmlns="http://www.w3.org/2000/svg" style={{display:'block'}}>
@@ -96,6 +110,11 @@ export default function App(){
     setJuntas(prev=>prev.filter(j=>j!==nome))
   }
 
+  // [FIX] Zerar contador de nº de série
+  const handleResetSerial=()=>{
+    resetSerialCounter()
+  }
+
   const TABS=['Dados da Obra','Registros para Certificação','Gestão de Registros','Vista 3D']
 
   if(loading) return(
@@ -153,6 +172,7 @@ export default function App(){
           registros={registros}
           atividades={atividades}
           onDeleteRegistro={handleDeleteRegistro}
+          onResetSerial={handleResetSerial}
         />}
         {tab===3&&<Vista3D
           registros={registros}
