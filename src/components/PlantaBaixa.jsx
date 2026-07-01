@@ -1,20 +1,29 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { saveRegistro, deleteRegistro } from '../supabase'
 
 const GOLD='#68541F',GOLD2='#8B6F2E',BEIGE='#CDC9B8',BEIGE2='#EDE8DF'
-const JET='#1A1A18',JET2='#2C2C28',JET3='#3E3E38',WHITE='#FFFFFF',OFF='#F7F5F0'
+const JET='#1A1A18',JET2='#2C2C28',WHITE='#FFFFFF',OFF='#F7F5F0'
 
-const PRESET_COLORS=['#68541F','#8B6F2E','#A0522D','#6D4C41','#4E342E','#3E2723','#2E7D32','#388E3C','#1B5E20','#1565C0','#0D47A1','#C62828','#AD1457','#E65100','#F9A825','#F9C31A','#FFD600','#6A1B9A','#4A148C','#212121','#424242','#616161','#757575','#9E9E9E','#BDBDBD','#00838F','#37474F']
+const PRESET_COLORS=['#68541F','#8B6F2E','#A0522D','#6D4C41','#4E342E','#3E2723','#2E7D32','#388E3C','#1B5E20','#1565C0','#0D47A1','#C62828','#AD1457','#E65100','#F9A825','#FFD600','#6A1B9A','#4A148C','#212121','#616161','#9E9E9E','#00838F','#37474F']
 
-// ── STATUS de comentário ──────────────────────────────────────────
-const STATUS_OPTIONS=[
-  {value:'concluido', label:'Concluído', color:'#2E7D32'},
-  {value:'pendente',  label:'Pendente',  color:'#C62828'},
-  {value:'a_iniciar', label:'A iniciar', color:'#E65100'},
+const STATUS_COMENT=[
+  {value:'concluido',label:'Concluído',color:'#2E7D32'},
+  {value:'pendente', label:'Pendente', color:'#C62828'},
+  {value:'a_iniciar',label:'A iniciar',color:'#E65100'},
 ]
-function statusLabel(v){ return STATUS_OPTIONS.find(s=>s.value===v) }
 
-// ── UTM (mantida para uso sob demanda) ───────────────────────────
+const STATUS_DOC=[
+  {value:'pendente',     label:'Pendente',     color:'#C62828'},
+  {value:'validar',      label:'Validar',      color:'#E65100'},
+  {value:'validado',     label:'Validado',     color:'#2E7D32'},
+  {value:'nao_se_aplica',label:'Não se aplica',color:'#888'},
+]
+
+function docStatusBadge(status){
+  const s=STATUS_DOC.find(x=>x.value===status)
+  if(!s) return null
+  return <span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10,background:s.color+'22',color:s.color,border:`1px solid ${s.color}44`,letterSpacing:.3}}>{s.label}</span>
+}
+
 function latLngToUTM(lat,lng){
   const a=6378137,f=1/298.257223563,b=a*(1-f),e2=(a*a-b*b)/(a*a),k0=0.9996,E0=500000,N0=lat<0?10000000:0
   const latR=lat*Math.PI/180,lngR=lng*Math.PI/180
@@ -29,14 +38,9 @@ function latLngToUTM(lat,lng){
 }
 
 function nowStr(){return new Date().toLocaleString('pt-BR')}
+function fmtDate(iso){return iso?new Date(iso).toLocaleString('pt-BR'):''}
 
-let _serial=0
-function nextSerial(existing=[]){
-  const nums=existing.map(r=>parseInt(r.serial?.replace('#','')||'0')||0)
-  const max=nums.length?Math.max(...nums):_serial
-  _serial=max+1
-  return '#'+String(_serial).padStart(6,'0')
-}
+import { nextSerial } from '../App'
 
 function Btn({children,onClick,color=GOLD,small,outline,disabled,danger}){
   const c=danger?'#C0392B':color
@@ -48,6 +52,22 @@ function Inp({label,value,onChange,type='text',placeholder}){
     {label&&<label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>{label}</label>}
     <input type={type} value={value||''} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{width:'100%',boxSizing:'border-box',border:'1px solid #D4C9B0',borderRadius:6,padding:'7px 10px',fontSize:13,background:WHITE,outline:'none'}}/>
   </div>
+}
+
+function StatusDocSel({value, onChange}){
+  return(
+    <div style={{marginBottom:8}}>
+      <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4,letterSpacing:.5,textTransform:'uppercase'}}>Status</label>
+      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+        {STATUS_DOC.map(s=>(
+          <button key={s.value} onClick={()=>onChange(s.value)}
+            style={{padding:'4px 10px',borderRadius:10,border:`1.5px solid ${s.color}`,background:value===s.value?s.color:'transparent',color:value===s.value?WHITE:s.color,fontSize:10,fontWeight:600,cursor:'pointer',transition:'all .15s'}}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function Sec({title,children,defaultOpen=true}){
@@ -88,9 +108,7 @@ function Sel({label,value,onChange,options,allowNew,onAddNew,onRemove,withColor}
       {onRemove&&value&&<Btn small danger outline onClick={()=>{onRemove(value);onChange('');}}>✕</Btn>}
     </div>
     {adding&&<div style={{marginTop:6}}>
-      <div style={{display:'flex',gap:6,marginBottom:6}}>
-        <input value={nv} onChange={e=>setNv(e.target.value)} placeholder="Nome" style={{flex:1,border:'1px solid #D4C9B0',borderRadius:6,padding:'6px 10px',fontSize:13}}/>
-      </div>
+      <input value={nv} onChange={e=>setNv(e.target.value)} placeholder="Nome" style={{width:'100%',boxSizing:'border-box',border:'1px solid #D4C9B0',borderRadius:6,padding:'6px 10px',fontSize:13,marginBottom:6}}/>
       {withColor&&<div style={{marginBottom:8}}>
         <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4}}>COR DO ÍCONE</label>
         <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
@@ -130,27 +148,21 @@ function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros}){
   )
 }
 
-// ── Ícone de câmera com badge de pendentes ────────────────────────
-function CameraIcon({reg, onClick, style}){
+function CameraIcon({reg,onClick,style}){
+  // Conta só pendentes (excluindo concluídos)
   const pendentes=reg.coments?.filter(c=>c.status==='pendente').length||0
   return(
     <div onClick={onClick} title={`${reg.serial||''} · ${reg.atividade||'Registro'}`}
-      style={{...style, position:'absolute', cursor:'pointer'}}>
+      style={{...style,position:'absolute',cursor:'pointer'}}>
       📷
       {pendentes>0&&(
-        <div style={{
-          position:'absolute', top:-5, right:-5,
-          width:15, height:15, borderRadius:'50%',
-          background:'#C62828', border:'1.5px solid white',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontSize:8, fontWeight:700, color:WHITE, lineHeight:1
-        }}>{pendentes}</div>
+        <div style={{position:'absolute',top:-5,right:-5,width:15,height:15,borderRadius:'50%',background:'#C62828',border:'1.5px solid white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:WHITE,lineHeight:1}}>{pendentes}</div>
       )}
     </div>
   )
 }
 
-function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome}){
+function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome,plantaUpdatedAt}){
   const[fotos,setFotos]=useState(existing?.fotos||[])
   const horario=existing?.horario||nowStr()
   const[junta,setJunta]=useState(existing?.junta||'')
@@ -165,23 +177,17 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const[coments,setComents]=useState(existing?.coments||[])
   const[drive,setDrive]=useState(existing?.drive||'')
   const[confirmDel,setConfirmDel]=useState(false)
-  const serial=existing?.serial||nextSerial(registros)
-
-  // ── NÃO gera coordenadas automaticamente ─────────────────────
-  // (removido o useEffect que chamava geolocation no mount)
+  const serial=existing?.serial||nextSerial()
 
   const handleGetUTM=()=>{
-    if(!navigator.geolocation){ alert('Geolocalização não disponível.'); return }
+    if(!navigator.geolocation){alert('Geolocalização não disponível.');return}
     setGeoLoading(true)
     navigator.geolocation.getCurrentPosition(p=>{
       const lat=p.coords.latitude,lng=p.coords.longitude
       setGeo({lat:lat.toFixed(6),lng:lng.toFixed(6)})
       try{const u=latLngToUTM(lat,lng);setUtmCoord(u);}catch{}
       setGeoLoading(false)
-    },()=>{
-      alert('Não foi possível obter localização. Verifique as permissões do navegador.')
-      setGeoLoading(false)
-    })
+    },()=>{alert('Não foi possível obter localização.');setGeoLoading(false)})
   }
 
   const readFile=(f,cb)=>{const r=new FileReader();r.onload=ev=>cb(ev.target.result,f.name);r.readAsDataURL(f);}
@@ -190,26 +196,21 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
   const handleSave=()=>{
-    onSave({
-      fotos,horario,junta,pavimento,
-      geo_lat:geo?.lat,geo_lng:geo?.lng,
-      utm_zone:utmCoord?.zone,utm_e:utmCoord?.E,utm_n:utmCoord?.N,
-      atividade,responsavel,nfs,cats,coments,drive,serial
-    })
+    onSave({fotos,horario,junta,pavimento,geo_lat:geo?.lat,geo_lng:geo?.lng,utm_zone:utmCoord?.zone,utm_e:utmCoord?.E,utm_n:utmCoord?.N,atividade,responsavel,nfs,cats,coments,drive,serial})
   }
 
   return(
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{background:WHITE,borderRadius:14,width:'min(600px,97vw)',maxHeight:'92vh',overflowY:'auto',boxShadow:'0 12px 60px rgba(0,0,0,.4)'}}>
         <div style={{background:JET,color:WHITE,padding:'12px 16px',borderRadius:'14px 14px 0 0',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,zIndex:5}}>
-          <div>
+          <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
             <span style={{fontWeight:700,fontSize:14}}>{existing?'✏️ Editar':'📍 Novo'} Registro</span>
-            <span style={{marginLeft:10,fontSize:12,color:GOLD,fontWeight:700}}>{serial}</span>
-            {/* [FIX] Nome do arquivo da planta */}
-            {plantaNome&&<span style={{marginLeft:12,fontSize:10,color:'#777',fontStyle:'italic'}}>📄 {plantaNome}</span>}
+            <span style={{fontSize:12,color:GOLD,fontWeight:700}}>{serial}</span>
+            {plantaNome&&<span style={{fontSize:10,color:'#777',fontStyle:'italic'}}>📄 {plantaNome}{plantaUpdatedAt?` · ${fmtDate(plantaUpdatedAt)}`:''}</span>}
           </div>
           <button onClick={onClose} style={{background:'none',border:'none',color:WHITE,fontSize:18,cursor:'pointer'}}>✕</button>
         </div>
+
         <div style={{padding:16}}>
           <Sec title="📷 Fotos">
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
@@ -233,20 +234,15 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
           <Sec title="ℹ️ Informações Gerais">
             <div style={{fontSize:12,color:'#888',marginBottom:4}}>🕐 <b>{horario}</b></div>
             {geo&&<div style={{fontSize:12,color:'#888',marginBottom:2}}>📍 WGS84: <b>{geo.lat}, {geo.lng}</b></div>}
-
-            {/* [FIX] Coordenadas UTM sob demanda */}
             {utmCoord
-              ?<div style={{fontSize:12,color:'#888',marginBottom:8,background:BEIGE2,borderRadius:6,padding:'6px 10px'}}>
-                📐 UTM Zona <b>{utmCoord.zone}</b> · E <b>{utmCoord.E}</b> / N <b>{utmCoord.N}</b>
-              </div>
+              ?<div style={{fontSize:12,color:'#888',marginBottom:8,background:BEIGE2,borderRadius:6,padding:'6px 10px'}}>📐 UTM Zona <b>{utmCoord.zone}</b> · E <b>{utmCoord.E}</b> / N <b>{utmCoord.N}</b></div>
               :<div style={{marginBottom:8}}>
                 <button onClick={handleGetUTM} disabled={geoLoading}
                   style={{background:geoLoading?'#888':JET2,color:WHITE,border:'none',borderRadius:6,padding:'7px 16px',fontSize:12,fontWeight:600,cursor:geoLoading?'not-allowed':'pointer'}}>
-                  {geoLoading?'📡 Obtendo localização…':'📐 Gerar coordenadas UTM'}
+                  {geoLoading?'📡 Obtendo…':'📐 Gerar coordenadas UTM'}
                 </button>
               </div>
             }
-
             <Inp label="Responsável pelo Registro" value={responsavel} onChange={setResp}/>
             <Sel label="Junta" value={junta} onChange={setJunta} options={juntas} allowNew onAddNew={v=>onSaveJunta(v)} onRemove={v=>onDeleteJunta(v)}/>
             <Inp label="Pavimento" value={pavimento} onChange={setPav}/>
@@ -257,31 +253,41 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
             </div>}
           </Sec>
 
+          {/* NOTAS FISCAIS com status */}
           <Sec title="📄 Notas Fiscais" defaultOpen={false}>
             {nfs.map((n,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
                 <button onClick={()=>setNfs(nfs.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
                 <Inp label="Nome do Material" value={n.nome} onChange={v=>setNfs(nfs.map((x,j)=>j===i?{...x,nome:v}:x))}/>
-                {n.nomeArq?<div style={{fontSize:12,color:GOLD}}>📎 {n.nomeArq}</div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar PDF<input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm}:x)));}} /></label>}
+                {/* STATUS do documento */}
+                <StatusDocSel value={n.status} onChange={v=>setNfs(nfs.map((x,j)=>j===i?{...x,status:v}:x))}/>
+                {n.nomeArq
+                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>📎 {n.nomeArq} {docStatusBadge(n.status)}</div>
+                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar PDF<input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm}:x)));}} /></label>
+                }
               </div>
             ))}
-            <Btn small outline onClick={()=>setNfs([...nfs,{nome:''}])}>+ Adicionar NF</Btn>
+            <Btn small outline onClick={()=>setNfs([...nfs,{nome:'',status:'pendente'}])}>+ Adicionar NF</Btn>
           </Sec>
 
+          {/* CATÁLOGO TÉCNICO com status */}
           <Sec title="📚 Catálogo Técnico" defaultOpen={false}>
             {cats.map((c,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
                 <button onClick={()=>setCats(cats.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
                 <Inp label="Nome do Material" value={c.nome} onChange={v=>setCats(cats.map((x,j)=>j===i?{...x,nome:v}:x))}/>
-                {c.nomeArq?<div style={{fontSize:12,color:GOLD}}>📎 {c.nomeArq}</div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar Arquivo<input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm}:x)));}} /></label>}
+                {/* STATUS do catálogo */}
+                <StatusDocSel value={c.status} onChange={v=>setCats(cats.map((x,j)=>j===i?{...x,status:v}:x))}/>
+                {c.nomeArq
+                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>📎 {c.nomeArq} {docStatusBadge(c.status)}</div>
+                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar Arquivo<input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm}:x)));}} /></label>
+                }
               </div>
             ))}
-            <Btn small outline onClick={()=>setCats([...cats,{nome:''}])}>+ Adicionar Catálogo</Btn>
+            <Btn small outline onClick={()=>setCats([...cats,{nome:'',status:'pendente'}])}>+ Adicionar Catálogo</Btn>
           </Sec>
 
-          {/* [FIX] Comentários com Status + Nome do usuário */}
+          {/* COMENTÁRIOS com status e badge correto (só pendentes) */}
           <Sec title="💬 Comentários" defaultOpen={false}>
             {coments.map((c,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
@@ -292,14 +298,11 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
                 <div style={{marginBottom:8}}>
                   <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4,letterSpacing:.5,textTransform:'uppercase'}}>Status</label>
                   <div style={{display:'flex',gap:6}}>
-                    {STATUS_OPTIONS.map(s=>(
+                    {STATUS_COMENT.map(s=>(
                       <button key={s.value} onClick={()=>setComents(coments.map((x,j)=>j===i?{...x,status:s.value}:x))}
-                        style={{
-                          flex:1, padding:'5px 0', borderRadius:6, border:`1.5px solid ${s.color}`,
-                          background:c.status===s.value?s.color:'transparent',
-                          color:c.status===s.value?WHITE:s.color,
-                          fontSize:11, fontWeight:600, cursor:'pointer', transition:'all .15s'
-                        }}>{s.label}</button>
+                        style={{flex:1,padding:'5px 0',borderRadius:6,border:`1.5px solid ${s.color}`,background:c.status===s.value?s.color:'transparent',color:c.status===s.value?WHITE:s.color,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all .15s'}}>
+                        {s.label}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -329,7 +332,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   )
 }
 
-export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta}){
+export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta}){
   const canvasRef=useRef()
   const fileRef=useRef()
   const[addPav,setAddPav]=useState(false)
@@ -338,11 +341,14 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
   const[pan,setPan]=useState({x:0,y:0})
   const[dragging,setDragging]=useState(false)
   const[lastTouch,setLastTouch]=useState(null)
-  // [FIX] guarda o nome do arquivo da planta por pavimento
-  const[plantaNomes,setPlantaNomes]=useState({})
+  const[saving,setSaving]=useState(false)
   const dragStart=useRef(null)
-  const planta=plantas[pavAtivo]
-  const plantaNome=plantaNomes[pavAtivo]||null
+
+  // plantas é agora { pavimento: { data, nome, updated_at } }
+  const plantaObj=plantas[pavAtivo]
+  const planta=plantaObj?.data||null
+  const plantaNome=plantaObj?.nome||null
+  const plantaUpdatedAt=plantaObj?.updated_at||null
 
   const handleWheel=useCallback(e=>{
     e.preventDefault()
@@ -356,22 +362,23 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
     return()=>el.removeEventListener('wheel',handleWheel)
   },[handleWheel])
 
-  // [FIX] guarda nome do arquivo ao fazer upload/trocar
   const handleUpload=e=>{
     const f=e.target.files[0];if(!f) return
     const r=new FileReader()
     r.onload=ev=>{
-      setPlantas({...plantas,[pavAtivo]:ev.target.result})
-      setPlantaNomes({...plantaNomes,[pavAtivo]:f.name})
+      // Atualiza state local imediatamente para preview
+      setPlantas(prev=>({...prev,[pavAtivo]:{data:ev.target.result,nome:f.name,updated_at:new Date().toISOString()}}))
     }
     r.readAsDataURL(f)
   }
 
-  // [FIX] salvar planta sem trocar (novo botão)
-  const handleSavePlanta=()=>{
-    if(!planta){ alert('Nenhuma planta carregada.'); return }
-    alert(`Planta "${plantaNome||pavAtivo}" salva com sucesso.`)
-    // aqui você pode chamar uma função de persistência no Supabase se necessário
+  // Salva planta no Supabase
+  const handleSavePlanta=async()=>{
+    if(!planta){alert('Nenhuma planta carregada.');return}
+    setSaving(true)
+    await onSavePlanta(pavAtivo, planta, plantaNome||pavAtivo)
+    setSaving(false)
+    alert(`Planta "${plantaNome||pavAtivo}" salva com sucesso!`)
   }
 
   const handleImgClick=e=>{
@@ -399,7 +406,7 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
 
   return(
     <div style={{display:'flex',gap:0}}>
-      {/* ── Painel de Pavimentos ── */}
+      {/* Painel de Pavimentos */}
       <div style={{width:160,flexShrink:0,background:JET,borderRadius:'10px 0 0 10px',padding:'14px 8px',display:'flex',flexDirection:'column',alignItems:'center'}}>
         <div style={{fontSize:9,color:'#666',letterSpacing:2,textTransform:'uppercase',marginBottom:10}}>Pavimentos</div>
         <div style={{width:'100%',overflowY:'auto',maxHeight:480}}>
@@ -415,19 +422,15 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
               </div>
             </div>
             :<div style={{display:'flex',flexDirection:'column',gap:4}}>
-              {/* [FIX] + Pavimento */}
               <button onClick={()=>setAddPav(true)} style={{width:'100%',background:'transparent',border:'1px dashed #3E3E38',color:'#666',borderRadius:6,padding:'6px 0',fontSize:11,cursor:'pointer'}}>+ Pavimento</button>
-              {/* [FIX] - Pavimento (exclui o pavimento ativo) */}
               {pavimentos.length>1&&(
                 <button onClick={()=>{
                   const idx=pavimentos.indexOf(pavAtivo)
-                  const novo=[...pavimentos.filter(p=>p!==pavAtivo)]
+                  const novo=pavimentos.filter(p=>p!==pavAtivo)
                   setPavimentos(novo)
                   setPavAtivo(novo[Math.max(0,idx-1)]||novo[0])
-                  // limpa a planta do pavimento removido
-                  const novasPlantas={...plantas}
-                  delete novasPlantas[pavAtivo]
-                  setPlantas(novasPlantas)
+                  if(onDeletePlanta) onDeletePlanta(pavAtivo)
+                  setPlantas(prev=>{const n={...prev};delete n[pavAtivo];return n})
                 }} style={{width:'100%',background:'transparent',border:'1px dashed #6B2020',color:'#C0392B',borderRadius:6,padding:'6px 0',fontSize:11,cursor:'pointer'}}>− Excluir pavimento</button>
               )}
             </div>
@@ -435,13 +438,13 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
         </div>
       </div>
 
-      {/* ── Área da planta ── */}
+      {/* Área da planta */}
       <div style={{flex:1,background:WHITE,borderRadius:'0 10px 10px 0',border:`1px solid ${BEIGE}`,borderLeft:'none',overflow:'hidden'}}>
         <div style={{background:BEIGE2,padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${BEIGE}`}}>
           <div>
             <span style={{fontSize:12,fontWeight:700,color:GOLD}}>{pavAtivo}</span>
-            {/* [FIX] Título com nome do arquivo */}
             {plantaNome&&<span style={{marginLeft:10,fontSize:10,color:'#999',fontStyle:'italic'}}>📄 {plantaNome}</span>}
+            {plantaUpdatedAt&&<span style={{marginLeft:8,fontSize:9,color:'#bbb'}}>· atualizada em {fmtDate(plantaUpdatedAt)}</span>}
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {planta&&<>
@@ -451,11 +454,11 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
               <button onClick={()=>{setZoom(1);setPan({x:0,y:0});}} style={{background:'transparent',border:`1px solid ${BEIGE}`,borderRadius:5,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'#888'}}>Reset</button>
             </>}
             <input ref={fileRef} type="file" accept="image/*,.pdf" style={{display:'none'}} onChange={handleUpload}/>
-            {/* [FIX] Botão Salvar ao lado de Trocar/Carregar */}
+            {/* Salvar persiste no Supabase */}
             {planta&&(
-              <button onClick={handleSavePlanta}
-                style={{background:GOLD,border:`1.5px solid ${GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                💾 Salvar
+              <button onClick={handleSavePlanta} disabled={saving}
+                style={{background:saving?'#888':GOLD,border:`1.5px solid ${saving?'#888':GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:saving?'not-allowed':'pointer'}}>
+                {saving?'Salvando…':'💾 Salvar'}
               </button>
             )}
             <button onClick={()=>fileRef.current.click()} style={{background:'transparent',border:`1.5px solid ${GOLD}`,color:GOLD,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
@@ -481,21 +484,16 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
               <div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}} onClick={handleImgClick}>
                 <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
               </div>
-              {/* [FIX] Ícones com badge de pendentes */}
               {regsAtivos.map(reg=>(
                 <CameraIcon key={reg.id} reg={reg}
                   onClick={e=>{e.stopPropagation();setIconClicked(reg.id);}}
                   style={{
                     left:`calc(${reg.x}% * ${zoom} + ${pan.x}px - 14px)`,
                     top:`calc(${reg.y}% * ${zoom} + ${pan.y}px - 14px)`,
-                    width:28, height:28,
-                    background:getColor(reg.atividade),
-                    borderRadius:'50%',
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize:13,
-                    boxShadow:'0 2px 10px rgba(0,0,0,.45)',
-                    border:'2.5px solid rgba(255,255,255,.7)',
-                    zIndex:20,
+                    width:28,height:28,background:getColor(reg.atividade),
+                    borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:13,boxShadow:'0 2px 10px rgba(0,0,0,.45)',
+                    border:'2.5px solid rgba(255,255,255,.7)',zIndex:20,
                     transition:dragging?'none':'left .1s,top .1s'
                   }}
                 />
@@ -508,8 +506,8 @@ export default function PlantaBaixa({plantas,setPlantas,pavimentos,setPavimentos
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
-      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
+      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
     </div>
   )
 }
