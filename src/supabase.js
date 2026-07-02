@@ -154,22 +154,18 @@ export const deletePlanta = async (empId, pavimento) => {
 
 // ── Arquivos NFs e Catálogos (tabela separada) ───────────────────
 export const saveArquivos = async (registroId, empId, nfs, cats) => {
+  // Deleta arquivos antigos
   await supabase.from('arquivos').delete().eq('registro_id', registroId)
-  const rows = []
-  // NFs: salva metadados + arquivo mas sem base64 inline no registro
-  ;(nfs||[]).forEach(n => rows.push({
-    registro_id: registroId, empreendimento_id: empId, tipo: 'nf',
-    nome: n.nome||'', nome_arq: n.nomeArq||'', status: n.status||'pendente',
-    arquivo: n.arquivo||''
-  }))
-  ;(cats||[]).forEach(c => rows.push({
-    registro_id: registroId, empreendimento_id: empId, tipo: 'cat',
-    nome: c.nome||'', nome_arq: c.nomeArq||'', status: c.status||'pendente',
-    arquivo: c.arquivo||''
-  }))
-  if (rows.length > 0) {
-    const { error } = await supabase.from('arquivos').insert(rows)
-    if (error) console.error('saveArquivos error:', error)
+  
+  const allItems = [
+    ...(nfs||[]).map(n => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'nf', nome: n.nome||'', nome_arq: n.nomeArq||'', status: n.status||'pendente', arquivo: n.arquivo||'' })),
+    ...(cats||[]).map(c => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'cat', nome: c.nome||'', nome_arq: c.nomeArq||'', status: c.status||'pendente', arquivo: c.arquivo||'' }))
+  ]
+  
+  // Salva um por vez para evitar timeout com arquivos grandes
+  for (const item of allItems) {
+    const { error } = await supabase.from('arquivos').insert(item)
+    if (error) console.error('saveArquivos item error:', error.message)
   }
 }
 export const getArquivos = async (empId) => {
