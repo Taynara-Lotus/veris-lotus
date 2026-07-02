@@ -50,20 +50,45 @@ export const getRegistros = async (empId) => {
     .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,nfs,cats,x,y,empreendimento_id,created_at,updated_at')
     .eq('empreendimento_id', empId)
     .order('created_at', { ascending: false })
-  return data || []
+  if (!data) return []
+  // Carrega fotos de cada registro (lazy — só IDs e nomes, sem data pesada)
+  const fotosData = await supabase.from('fotos').select('id,registro_id,nome,data').eq('empreendimento_id', empId)
+  const fotosMap = {}
+  ;(fotosData.data || []).forEach(f => {
+    if (!fotosMap[f.registro_id]) fotosMap[f.registro_id] = []
+    fotosMap[f.registro_id].push({ data: f.data, nome: f.nome })
+  })
+  return data.map(r => ({ ...r, fotos: fotosMap[r.id] || [] }))
 }
 export const saveRegistro = async (registro) => {
-  const { id, ...rest } = registro
+  const { id, fotos, ...rest } = registro  // remove fotos do payload principal
   if (id) {
     const { data } = await supabase.from('registros').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id).select().single()
-    return data
+    if (data && fotos) await saveFotos(data.id, rest.empreendimento_id, fotos)
+    return data ? { ...data, fotos: fotos || [] } : null
   } else {
     const { data } = await supabase.from('registros').insert(rest).select().single()
-    return data
+    if (data && fotos) await saveFotos(data.id, rest.empreendimento_id, fotos)
+    return data ? { ...data, fotos: fotos || [] } : null
   }
 }
 export const deleteRegistro = async (id) => {
   await supabase.from('registros').delete().eq('id', id)
+  await supabase.from('fotos').delete().eq('registro_id', id)
+}
+
+// ── Fotos (tabela separada para evitar payload gigante) ───────────
+export const getFotos = async (registroId) => {
+  const { data } = await supabase.from('fotos').select('id,nome,data').eq('registro_id', registroId).order('created_at')
+  return data || []
+}
+export const saveFotos = async (registroId, empId, fotos) => {
+  // Remove fotos antigas e insere as novas
+  await supabase.from('fotos').delete().eq('registro_id', registroId)
+  if (fotos && fotos.length > 0) {
+    const rows = fotos.map(f => ({ registro_id: registroId, empreendimento_id: empId, data: f.data, nome: f.nome }))
+    await supabase.from('fotos').insert(rows)
+  }
 }
 
 // ── Plantas — sem imagem na listagem, carrega sob demanda ─────────
