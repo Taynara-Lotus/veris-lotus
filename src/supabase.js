@@ -143,6 +143,10 @@ export const getUsuarios = async () => {
   const { data } = await supabase.from('usuarios').select('id,nome,email,telefone,role,initials,projeto,created_at').order('nome')
   return data || []
 }
+export const loginUsuario = async (email, senha) => {
+  const { data } = await supabase.from('usuarios').select('*').eq('email', email).eq('senha', senha).maybeSingle()
+  return data || null
+}
 export const saveUsuario = async (usuario) => {
   const { id, _newSenha, ...rest } = usuario
   // Se tem nova senha, aplica
