@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getEmpreendimentos, saveEmpreendimento, deleteEmpreendimento, getUsuarios, saveUsuario } from '../supabase'
+import { getEmpreendimentos, saveEmpreendimento, deleteEmpreendimento, getUsuarios, saveUsuario, loginUsuario } from '../supabase'
 
 const GOLD='#68541F', GOLD2='#8a7030', BEIGE='#CDC9B8', OFF='#F7F5F0', JET='#1A1A18', WHITE='#FFFFFF'
 const ROLE_LABEL = { adm_global:'Adm Global', adm_empreendimento:'Adm Empreendimento', visualizador:'Visualizador' }
@@ -184,8 +184,8 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
   }, [authed])
 
   const handleLogin = async () => {
-    const usersData = await getUsuarios()
-    const u = usersData.find(x => x.email === email && x.senha === senha)
+    if (!email || !senha) { setLoginErr('Preencha e-mail e senha.'); return }
+    const u = await loginUsuario(email.trim().toLowerCase(), senha)
     if (u) { setLoginErr(''); onLogin(u); setProfileForm(u); }
     else setLoginErr('E-mail ou senha incorretos.')
   }
