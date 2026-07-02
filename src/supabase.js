@@ -6,7 +6,11 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
 // ── Empreendimentos ───────────────────────────────────────────────
 export const getEmpreendimentos = async () => {
-  const { data } = await supabase.from('empreendimentos').select('*').order('created_at', { ascending: true })
+  // Não traz a foto (base64 pesado) na listagem — só id, nome, cidade etc.
+  const { data } = await supabase
+    .from('empreendimentos')
+    .select('id,nome,cidade,estado,pais,cert,nivel,foto,arquivado,created_at')
+    .order('created_at', { ascending: true })
   return data || []
 }
 export const saveEmpreendimento = async (emp) => {
@@ -23,7 +27,7 @@ export const deleteEmpreendimento = async (id) => {
   await supabase.from('empreendimentos').delete().eq('id', id)
 }
 
-// ── Obras (por empreendimento) ────────────────────────────────────
+// ── Obras ─────────────────────────────────────────────────────────
 export const getObra = async (empId) => {
   const { data } = await supabase.from('obras').select('*').eq('empreendimento_id', empId).maybeSingle()
   return data
@@ -39,9 +43,13 @@ export const saveObra = async (obra) => {
   }
 }
 
-// ── Registros (por empreendimento) ───────────────────────────────
+// ── Registros — sem fotos/anexos na listagem (carrega sob demanda) ─
 export const getRegistros = async (empId) => {
-  const { data } = await supabase.from('registros').select('*').eq('empreendimento_id', empId).order('created_at', { ascending: false })
+  const { data } = await supabase
+    .from('registros')
+    .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,nfs,cats,x,y,empreendimento_id,created_at,updated_at')
+    .eq('empreendimento_id', empId)
+    .order('created_at', { ascending: false })
   return data || []
 }
 export const saveRegistro = async (registro) => {
@@ -58,14 +66,28 @@ export const deleteRegistro = async (id) => {
   await supabase.from('registros').delete().eq('id', id)
 }
 
-// ── Plantas (por empreendimento) ──────────────────────────────────
-export const getPlantas = async (empId) => {
-  const { data } = await supabase.from('plantas').select('*').eq('empreendimento_id', empId)
+// ── Plantas — sem imagem na listagem, carrega sob demanda ─────────
+export const getPlantasMeta = async (empId) => {
+  // Busca só metadados (nome, pavimento, updated_at) — rápido
+  const { data } = await supabase
+    .from('plantas')
+    .select('id,pavimento,nome_arquivo,updated_at,empreendimento_id')
+    .eq('empreendimento_id', empId)
   if (!data) return {}
   return data.reduce((acc, row) => {
-    acc[row.pavimento] = { data: row.imagem, nome: row.nome_arquivo, updated_at: row.updated_at }
+    acc[row.pavimento] = { nome: row.nome_arquivo, updated_at: row.updated_at, loaded: false }
     return acc
   }, {})
+}
+export const getPlantaImagem = async (empId, pavimento) => {
+  // Carrega a imagem só quando necessário
+  const { data } = await supabase
+    .from('plantas')
+    .select('imagem')
+    .eq('empreendimento_id', empId)
+    .eq('pavimento', pavimento)
+    .maybeSingle()
+  return data?.imagem || null
 }
 export const savePlanta = async (empId, pavimento, imagem, nome_arquivo) => {
   const { data: existing } = await supabase.from('plantas').select('id').eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
@@ -80,7 +102,7 @@ export const deletePlanta = async (empId, pavimento) => {
   await supabase.from('plantas').delete().eq('empreendimento_id', empId).eq('pavimento', pavimento)
 }
 
-// ── Atividades (por empreendimento) ──────────────────────────────
+// ── Atividades ────────────────────────────────────────────────────
 export const getAtividades = async (empId) => {
   const { data } = await supabase.from('atividades').select('*').eq('empreendimento_id', empId).order('nome')
   return data || []
@@ -93,7 +115,7 @@ export const deleteAtividade = async (empId, nome) => {
   await supabase.from('atividades').delete().eq('empreendimento_id', empId).eq('nome', nome)
 }
 
-// ── Juntas (por empreendimento) ───────────────────────────────────
+// ── Juntas ────────────────────────────────────────────────────────
 export const getJuntas = async (empId) => {
   const { data } = await supabase.from('juntas').select('*').eq('empreendimento_id', empId).order('nome')
   return data || []
@@ -106,48 +128,48 @@ export const deleteJunta = async (empId, nome) => {
   await supabase.from('juntas').delete().eq('empreendimento_id', empId).eq('nome', nome)
 }
 
-// ── Serial (por empreendimento) ───────────────────────────────────
+// ── Serial ────────────────────────────────────────────────────────
 export const getSerialCounter = async (empId) => {
   const { data } = await supabase.from('config').select('value').eq('key', `serial_${empId}`).maybeSingle()
   return data ? parseInt(data.value) : 0
 }
 export const setSerialCounter = async (empId, value) => {
   const key = `serial_${empId}`
-  const { data: existing } = await supabase.from('config').select('id').eq('key', key).maybeSingle()
-  if (existing) {
-    await supabase.from('config').update({ value: String(value) }).eq('key', key)
-  } else {
-    await supabase.from('config').insert({ key, value: String(value) })
-  }
+  await supabase.from('config').upsert({ key, value: String(value) }, { onConflict: 'key' })
 }
 
 // ── Usuários ──────────────────────────────────────────────────────
 export const getUsuarios = async () => {
-  const { data } = await supabase.from('usuarios').select('*').order('nome')
+  const { data } = await supabase.from('usuarios').select('id,nome,email,telefone,role,initials,projeto,created_at').order('nome')
   return data || []
 }
 export const saveUsuario = async (usuario) => {
-  const { id, ...rest } = usuario
+  const { id, _newSenha, ...rest } = usuario
+  // Se tem nova senha, aplica
+  const payload = _newSenha ? { ...rest, senha: _newSenha } : rest
   if (id) {
-    const { data } = await supabase.from('usuarios').update(rest).eq('id', id).select().single()
+    const { data } = await supabase.from('usuarios').update(payload).eq('id', id).select().single()
     return data
   } else {
-    const { data } = await supabase.from('usuarios').insert(rest).select().single()
+    const { data } = await supabase.from('usuarios').insert(payload).select().single()
     return data
   }
 }
 
-// ── Log de Memória de Comandos ────────────────────────────────────
+// ── Logs — fire and forget (não bloqueia UI) ──────────────────────
 export const getLogs = async (empId) => {
-  const { data } = await supabase.from('logs').select('*').eq('empreendimento_id', empId).order('created_at', { ascending: false })
+  const { data } = await supabase
+    .from('logs')
+    .select('id,usuario,acao,detalhe,created_at')
+    .eq('empreendimento_id', empId)
+    .order('created_at', { ascending: false })
+    .limit(200) // limita para não carregar histórico infinito
   return data || []
 }
-export const addLog = async (empId, usuario, acao, detalhe = '') => {
-  await supabase.from('logs').insert({
-    empreendimento_id: empId,
-    usuario,
-    acao,
-    detalhe,
+export const addLog = (empId, usuario, acao, detalhe = '') => {
+  // Fire and forget — não usa await para não bloquear a UI
+  supabase.from('logs').insert({
+    empreendimento_id: empId, usuario, acao, detalhe,
     created_at: new Date().toISOString()
-  })
+  }).then(() => {})
 }
