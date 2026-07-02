@@ -70,23 +70,38 @@ export const getRegistros = async (empId) => {
 }
 export const saveRegistro = async (registro) => {
   const { id, fotos, nfs, cats, ...rest } = registro
-  // Remove nfs e cats do payload — salvos em tabela separada
   const payload = { ...rest }
   delete payload.nfs
   delete payload.cats
+  const empId = rest.empreendimento_id
+
+  // Faz upload dos arquivos com base64 para Storage antes de salvar
+  const processArquivos = async (items, tipo, regId) => {
+    return Promise.all((items||[]).map(async item => {
+      if (item.arquivo && item.arquivo.startsWith('data:') && !item.arquivo_url) {
+        const url = await uploadArquivo(empId, regId, tipo, item.arquivo, item.nomeArq||'arquivo')
+        return { ...item, arquivo_url: url||'', arquivo: '' }
+      }
+      return { ...item, arquivo: '' } // nunca salva base64 no DB
+    }))
+  }
 
   if (id) {
     const { data } = await supabase.from('registros').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select().single()
     if (data) {
-      if (fotos !== undefined) await saveFotos(data.id, rest.empreendimento_id, fotos)
-      if (nfs !== undefined || cats !== undefined) await saveArquivos(data.id, rest.empreendimento_id, nfs||[], cats||[])
+      if (fotos !== undefined) await saveFotos(data.id, empId, fotos)
+      const nfsProc = await processArquivos(nfs, 'nf', data.id)
+      const catsProc = await processArquivos(cats, 'cat', data.id)
+      await saveArquivos(data.id, empId, nfsProc, catsProc)
     }
     return data ? { ...data, fotos: fotos||[], nfs: nfs||[], cats: cats||[] } : null
   } else {
     const { data } = await supabase.from('registros').insert(payload).select().single()
     if (data) {
-      if (fotos !== undefined) await saveFotos(data.id, rest.empreendimento_id, fotos)
-      if (nfs !== undefined || cats !== undefined) await saveArquivos(data.id, rest.empreendimento_id, nfs||[], cats||[])
+      if (fotos !== undefined) await saveFotos(data.id, empId, fotos)
+      const nfsProc = await processArquivos(nfs, 'nf', data.id)
+      const catsProc = await processArquivos(cats, 'cat', data.id)
+      await saveArquivos(data.id, empId, nfsProc, catsProc)
     }
     return data ? { ...data, fotos: fotos||[], nfs: nfs||[], cats: cats||[] } : null
   }
@@ -154,18 +169,46 @@ export const deletePlanta = async (empId, pavimento) => {
 
 // ── Arquivos NFs e Catálogos (tabela separada) ───────────────────
 export const saveArquivos = async (registroId, empId, nfs, cats) => {
-  // Deleta arquivos antigos
   await supabase.from('arquivos').delete().eq('registro_id', registroId)
   
   const allItems = [
-    ...(nfs||[]).map(n => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'nf', nome: n.nome||'', nome_arq: n.nomeArq||'', status: n.status||'pendente', arquivo: n.arquivo||'' })),
-    ...(cats||[]).map(c => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'cat', nome: c.nome||'', nome_arq: c.nomeArq||'', status: c.status||'pendente', arquivo: c.arquivo||'' }))
+    ...(nfs||[]).map(n => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'nf', nome: n.nome||'', nome_arq: n.nomeArq||'', status: n.status||'pendente', arquivo_url: n.arquivo_url||'', arquivo: '' })),
+    ...(cats||[]).map(c => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'cat', nome: c.nome||'', nome_arq: c.nomeArq||'', status: c.status||'pendente', arquivo_url: c.arquivo_url||'', arquivo: '' }))
   ]
   
-  // Salva um por vez para evitar timeout com arquivos grandes
   for (const item of allItems) {
     const { error } = await supabase.from('arquivos').insert(item)
     if (error) console.error('saveArquivos item error:', error.message)
+  }
+}
+
+// Upload de arquivo para Supabase Storage
+export const uploadArquivo = async (empId, registroId, tipo, file, fileName) => {
+  try {
+    // Converte base64 para blob
+    let blob
+    if (file.startsWith('data:')) {
+      const res = await fetch(file)
+      blob = await res.blob()
+    } else {
+      blob = new Blob([file])
+    }
+    
+    const path = `${empId}/${registroId}/${tipo}/${Date.now()}_${fileName}`
+    const { data, error } = await supabase.storage
+      .from('arquivos-veris')
+      .upload(path, blob, { upsert: true })
+    
+    if (error) {
+      console.error('uploadArquivo error:', error.message)
+      return null
+    }
+    
+    const { data: urlData } = supabase.storage.from('arquivos-veris').getPublicUrl(path)
+    return urlData?.publicUrl || null
+  } catch (e) {
+    console.error('uploadArquivo exception:', e)
+    return null
   }
 }
 export const getArquivos = async (empId) => {
