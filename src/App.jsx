@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  getObra, saveObra, getRegistros, getAtividades, getJuntas,
+  getObra, saveObra, getRegistros, getAtividades, mapAtividades, getJuntas,
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
   saveJunta, deleteJunta, getPlantasMeta, getPlantaImagem,
   savePlanta, deletePlanta, getSerialCounter, setSerialCounter,
@@ -36,13 +36,9 @@ export async function initSerial(empId, registros) {
   const fromRegs = registros.length
     ? Math.max(...registros.map(r => parseInt(r.serial?.replace('#','') || '0') || 0))
     : 0
-  // Só vai ao banco se não tem nada nos registros
-  if (fromRegs > 0) {
-    _serialMap[empId] = fromRegs
-  } else {
-    const fromDB = await getSerialCounter(empId)
-    _serialMap[empId] = fromDB
-  }
+  const fromDB = await getSerialCounter(empId)
+  // Usa o maior valor entre registros e banco para garantir continuidade
+  _serialMap[empId] = Math.max(fromRegs, fromDB)
 }
 
 export function nextSerial(empId) {
@@ -103,7 +99,7 @@ export default function App() {
         else setObra({ nome: obraAberta.nome, certificacao: obraAberta.cert||'EDGE', nivel_certificacao: obraAberta.nivel||'', versao_certificacao:'', empreendimento_id: empId })
 
         setRegistros(regsData)
-        setAtividades(ativsData.map(a => ({ name: a.nome, color: a.cor })))
+        setAtividades(mapAtividades(ativsData))
         setJuntas(juntasData.map(j => j.nome))
         setPlantas(plantasMeta) // metadados apenas
 
@@ -277,7 +273,11 @@ export default function App() {
         )}
         {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial}/>}
         {tab===3 && <Vista3D registros={registros} pavimentos={pavimentos} atividades={atividades}/>}
-        {tab===4 && <MemoriaComandos logs={logs}/>}
+        {tab===4 && <MemoriaComandos logs={logs} currentUser={currentUser} onDeleteLogs={async (indices) => {
+          const toDelete = indices.map(i => logs[i]).filter(Boolean)
+          // Remove localmente
+          setLogs(prev => prev.filter((_, i) => !indices.includes(i)))
+        }}/>}
       </div>
     </div>
   )
