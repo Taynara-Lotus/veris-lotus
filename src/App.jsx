@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   getObra, saveObra, getRegistros, getAtividades, getJuntas,
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
-  saveJunta, deleteJunta, getPlantas, savePlanta, deletePlanta,
-  getSerialCounter, setSerialCounter, getLogs, addLog
+  saveJunta, deleteJunta, getPlantasMeta, getPlantaImagem,
+  savePlanta, deletePlanta, getSerialCounter, setSerialCounter,
+  getLogs, addLog
 } from './supabase'
 import DadosObra from './components/DadosObra'
 import PlantaBaixa from './components/PlantaBaixa'
@@ -23,7 +24,7 @@ const PAVIMENTOS_DEFAULT=[
   '13º Pavimento','14º Pavimento','15º Pavimento','Cobertura',
 ]
 
-// Serial por empreendimento
+// Serial por empreendimento — cache local
 const _serialMap = {}
 
 export function resetSerialForEmp(empId, onDone) {
@@ -32,17 +33,22 @@ export function resetSerialForEmp(empId, onDone) {
 }
 
 export async function initSerial(empId, registros) {
-  const fromDB = await getSerialCounter(empId)
   const fromRegs = registros.length
     ? Math.max(...registros.map(r => parseInt(r.serial?.replace('#','') || '0') || 0))
     : 0
-  _serialMap[empId] = Math.max(fromDB, fromRegs)
+  // Só vai ao banco se não tem nada nos registros
+  if (fromRegs > 0) {
+    _serialMap[empId] = fromRegs
+  } else {
+    const fromDB = await getSerialCounter(empId)
+    _serialMap[empId] = fromDB
+  }
 }
 
 export function nextSerial(empId) {
   if (!_serialMap[empId]) _serialMap[empId] = 0
   _serialMap[empId] += 1
-  setSerialCounter(empId, _serialMap[empId])
+  setSerialCounter(empId, _serialMap[empId]) // fire and forget
   return '#' + String(_serialMap[empId]).padStart(6, '0')
 }
 
@@ -57,6 +63,7 @@ export default function App() {
   const [atividades, setAtividades] = useState([])
   const [juntas, setJuntas] = useState([])
   const [pavimentos, setPavimentos] = useState(PAVIMENTOS_DEFAULT)
+  // plantas = { pavimento: { data, nome, updated_at, loaded } }
   const [plantas, setPlantas] = useState({})
   const [pavAtivo, setPavAtivo] = useState('Pavimento Térreo')
   const [modal, setModal] = useState(null)
@@ -64,6 +71,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [logs, setLogs] = useState([])
+  const [logsLoaded, setLogsLoaded] = useState(false)
 
   const empId = obraAberta?.id
 
@@ -71,40 +79,72 @@ export default function App() {
     if (!authed || !obraAberta) return
     ;(async () => {
       setLoading(true)
+      // Reset state
       setPavimentos(PAVIMENTOS_DEFAULT)
       setPlantas({})
       setRegistros([])
       setAtividades([])
       setJuntas([])
       setLogs([])
-      setTab(0)
+      setLogsLoaded(false)
+      setTab(0) // sempre abre em Dados da Obra
+
       try {
-        const [obraData, regsData, ativsData, juntasData, plantasData, logsData] = await Promise.all([
-          getObra(empId), getRegistros(empId), getAtividades(empId),
-          getJuntas(empId), getPlantas(empId), getLogs(empId)
+        // Carrega dados essenciais em paralelo — plantas só traz metadados (rápido)
+        const [obraData, regsData, ativsData, juntasData, plantasMeta] = await Promise.all([
+          getObra(empId),
+          getRegistros(empId),
+          getAtividades(empId),
+          getJuntas(empId),
+          getPlantasMeta(empId),   // só nomes/datas, sem base64
         ])
+
         if (obraData) setObra(obraData)
         else setObra({ nome: obraAberta.nome, certificacao: obraAberta.cert||'EDGE', nivel_certificacao: obraAberta.nivel||'', versao_certificacao:'', empreendimento_id: empId })
+
         setRegistros(regsData)
         setAtividades(ativsData.map(a => ({ name: a.nome, color: a.cor })))
         setJuntas(juntasData.map(j => j.nome))
-        setPlantas(plantasData)
-        setLogs(logsData)
+        setPlantas(plantasMeta) // metadados apenas
+
+        // Serial — usa registros locais, evita chamada extra ao banco
         await initSerial(empId, regsData)
+
       } catch(e) { console.error(e) }
       setLoading(false)
     })()
   }, [authed, obraAberta])
 
-  const logAction = async (acao, detalhe='') => {
-    await addLog(empId, currentUser?.nome || 'Sistema', acao, detalhe)
+  // Carrega logs só quando o usuário abre a aba Memória de Comandos
+  useEffect(() => {
+    if (tab !== 4 || logsLoaded || !empId) return
+    getLogs(empId).then(data => { setLogs(data); setLogsLoaded(true) })
+  }, [tab, logsLoaded, empId])
+
+  // Carrega imagem da planta só quando o usuário abre a aba Registros
+  useEffect(() => {
+    if (tab !== 1 || !empId) return
+    // Para cada pavimento que tem metadado mas não tem imagem carregada
+    Object.entries(plantas).forEach(([pav, info]) => {
+      if (info.nome && !info.data && !info.loading) {
+        setPlantas(prev => ({ ...prev, [pav]: { ...prev[pav], loading: true } }))
+        getPlantaImagem(empId, pav).then(img => {
+          if (img) setPlantas(prev => ({ ...prev, [pav]: { ...prev[pav], data: img, loading: false } }))
+        })
+      }
+    })
+  }, [tab, empId, plantas])
+
+  const logAction = (acao, detalhe='') => {
+    // Fire and forget — não bloqueia
+    addLog(empId, currentUser?.nome || 'Sistema', acao, detalhe)
     setLogs(prev => [{ usuario: currentUser?.nome, acao, detalhe, created_at: new Date().toISOString() }, ...prev])
   }
 
   const handleSaveObra = async (novaObra) => {
     setSyncing(true)
     const saved = await saveObra({ ...novaObra, empreendimento_id: empId })
-    if (saved) { setObra(saved); await logAction('Dados da obra atualizados') }
+    if (saved) { setObra(saved); logAction('Dados da obra atualizados') }
     setSyncing(false)
   }
 
@@ -116,7 +156,7 @@ export default function App() {
         const idx = prev.findIndex(r => r.id === saved.id)
         return idx >= 0 ? prev.map(r => r.id === saved.id ? saved : r) : [saved, ...prev]
       })
-      await logAction(reg.id ? 'Registro editado' : 'Registro criado', `Serial: ${saved.serial} · ${saved.atividade||''}`)
+      logAction(reg.id ? 'Registro editado' : 'Registro criado', `Serial: ${saved.serial} · ${saved.atividade||''}`)
     }
     setSyncing(false)
     return saved
@@ -127,7 +167,7 @@ export default function App() {
     setSyncing(true)
     await deleteRegistro(id)
     setRegistros(prev => prev.filter(r => r.id !== id))
-    await logAction('Registro excluído', `Serial: ${reg?.serial}`)
+    logAction('Registro excluído', `Serial: ${reg?.serial}`)
     setSyncing(false)
   }
 
@@ -135,14 +175,14 @@ export default function App() {
     setSyncing(true)
     await savePlanta(empId, pavimento, imageData, nomeArquivo)
     setPlantas(prev => ({ ...prev, [pavimento]: { data: imageData, nome: nomeArquivo, updated_at: new Date().toISOString() } }))
-    await logAction('Planta carregada', `Pavimento: ${pavimento} · Arquivo: ${nomeArquivo}`)
+    logAction('Planta carregada', `Pavimento: ${pavimento} · Arquivo: ${nomeArquivo}`)
     setSyncing(false)
   }
 
   const handleDeletePlanta = async (pavimento) => {
     await deletePlanta(empId, pavimento)
     setPlantas(prev => { const n = {...prev}; delete n[pavimento]; return n })
-    await logAction('Pavimento excluído', `Pavimento: ${pavimento}`)
+    logAction('Pavimento excluído', `Pavimento: ${pavimento}`)
   }
 
   const handleSaveAtividade = async (nome, cor) => {
@@ -170,9 +210,7 @@ export default function App() {
       alert('Só é possível reiniciar a contagem quando não há registros no empreendimento.')
       return
     }
-    resetSerialForEmp(empId, async () => {
-      await logAction('Nº de série reiniciado')
-    })
+    resetSerialForEmp(empId, () => logAction('Nº de série reiniciado'))
   }
 
   const TABS = ['Dados da Obra', 'Registros para Certificação', 'Gestão de Registros', 'Vista 3D', 'Memória de Comandos']
@@ -194,13 +232,13 @@ export default function App() {
     <div style={{height:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:JET,gap:16}}>
       <div style={{fontFamily:"'Georgia',serif",fontSize:32,fontWeight:300,letterSpacing:'.2em',color:'#F7F5F0'}}>VĒ<span style={{color:GOLD}}>R</span>IS</div>
       <div style={{fontSize:12,color:BEIGE,letterSpacing:3,textTransform:'uppercase'}}>Carregando {obraAberta?.nome}...</div>
-      <div style={{width:40,height:2,background:GOLD}}/>
+      <div style={{width:40,height:2,background:GOLD,animation:'none'}}/>
     </div>
   )
 
   return (
     <div style={{fontFamily:"'Helvetica Neue',Arial,sans-serif",background:'#F7F5F0',minHeight:'100vh',color:JET}}>
-      <div style={{background:JET,color:'#fff',padding:'0 24px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${JET3}`,height:56,position:'sticky',top:0,zIndex:100}}>
+      <div style={{background:JET,color:WHITE,padding:'0 24px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${JET3}`,height:56,position:'sticky',top:0,zIndex:100}}>
         <div style={{display:'flex',alignItems:'center',gap:18}}>
           <button onClick={()=>setObraAberta(null)} style={{background:'none',border:'none',color:BEIGE,cursor:'pointer',fontSize:11,letterSpacing:.8,opacity:.7}}>← Empreendimentos</button>
           <div style={{width:1,height:28,background:JET3}}/>
@@ -211,10 +249,6 @@ export default function App() {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           {syncing && <div style={{fontSize:10,color:GOLD,letterSpacing:1}}>● sincronizando...</div>}
-          <div style={{fontSize:10,color:'#555',textAlign:'right'}}>
-            {obra.nivel_certificacao && <div style={{color:GOLD}}>Nível: {obra.nivel_certificacao}</div>}
-            {obra.versao_certificacao && <div>v{obra.versao_certificacao}</div>}
-          </div>
         </div>
       </div>
 
@@ -241,12 +275,7 @@ export default function App() {
             empId={empId}
           />
         )}
-        {tab===2 && (
-          <GestaoRegistros
-            registros={registros} atividades={atividades}
-            onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial}
-          />
-        )}
+        {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial}/>}
         {tab===3 && <Vista3D registros={registros} pavimentos={pavimentos} atividades={atividades}/>}
         {tab===4 && <MemoriaComandos logs={logs}/>}
       </div>
