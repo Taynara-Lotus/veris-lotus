@@ -90,12 +90,15 @@ export const getPlantaImagem = async (empId, pavimento) => {
   return data?.imagem || null
 }
 export const savePlanta = async (empId, pavimento, imagem, nome_arquivo) => {
+  // Tenta update primeiro, se não existir faz insert
   const { data: existing } = await supabase.from('plantas').select('id').eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
   const payload = { empreendimento_id: empId, pavimento, imagem, nome_arquivo, updated_at: new Date().toISOString() }
-  if (existing) {
-    await supabase.from('plantas').update(payload).eq('id', existing.id)
+  if (existing?.id) {
+    const { error } = await supabase.from('plantas').update(payload).eq('id', existing.id)
+    if (error) console.error('savePlanta update error:', error)
   } else {
-    await supabase.from('plantas').insert(payload)
+    const { error } = await supabase.from('plantas').insert(payload)
+    if (error) console.error('savePlanta insert error:', error)
   }
 }
 export const deletePlanta = async (empId, pavimento) => {
@@ -107,6 +110,8 @@ export const getAtividades = async (empId) => {
   const { data } = await supabase.from('atividades').select('*').eq('empreendimento_id', empId).order('nome')
   return data || []
 }
+// Helper para converter formato do banco para formato do componente
+export const mapAtividades = (data) => data.map(a => ({ name: a.nome || a.name, color: a.cor || a.color }))
 export const saveAtividade = async (empId, nome, cor) => {
   const { data } = await supabase.from('atividades').upsert({ empreendimento_id: empId, nome, cor }, { onConflict: 'empreendimento_id,nome' }).select().single()
   return data
@@ -135,7 +140,13 @@ export const getSerialCounter = async (empId) => {
 }
 export const setSerialCounter = async (empId, value) => {
   const key = `serial_${empId}`
-  await supabase.from('config').upsert({ key, value: String(value) }, { onConflict: 'key' })
+  // Tenta update, se não existir faz insert
+  const { data: ex } = await supabase.from('config').select('id').eq('key', key).maybeSingle()
+  if (ex?.id) {
+    await supabase.from('config').update({ value: String(value) }).eq('id', ex.id)
+  } else {
+    await supabase.from('config').insert({ key, value: String(value) })
+  }
 }
 
 // ── Usuários ──────────────────────────────────────────────────────
