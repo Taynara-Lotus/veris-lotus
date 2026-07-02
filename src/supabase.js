@@ -58,23 +58,45 @@ export const getRegistros = async (empId) => {
     if (!fotosMap[f.registro_id]) fotosMap[f.registro_id] = []
     fotosMap[f.registro_id].push({ data: f.data, nome: f.nome })
   })
-  return data.map(r => ({ ...r, fotos: fotosMap[r.id] || [] }))
+  // Carrega arquivos (nfs e cats)
+  const arquivosData = await supabase.from('arquivos').select('*').eq('empreendimento_id', empId)
+  const nfsMap = {}, catsMap = {}
+  ;(arquivosData.data || []).forEach(a => {
+    const item = { nome: a.nome, nomeArq: a.nome_arq, status: a.status, arquivo: a.arquivo }
+    if (a.tipo === 'nf') { if (!nfsMap[a.registro_id]) nfsMap[a.registro_id] = []; nfsMap[a.registro_id].push(item) }
+    else { if (!catsMap[a.registro_id]) catsMap[a.registro_id] = []; catsMap[a.registro_id].push(item) }
+  })
+  return data.map(r => ({ ...r, fotos: fotosMap[r.id]||[], nfs: nfsMap[r.id]||[], cats: catsMap[r.id]||[] }))
 }
 export const saveRegistro = async (registro) => {
-  const { id, fotos, ...rest } = registro  // remove fotos do payload principal
+  const { id, fotos, nfs, cats, ...rest } = registro
+  // Remove nfs e cats do payload — salvos em tabela separada
+  const payload = { ...rest }
+  delete payload.nfs
+  delete payload.cats
+
   if (id) {
-    const { data } = await supabase.from('registros').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id).select().single()
-    if (data && fotos) await saveFotos(data.id, rest.empreendimento_id, fotos)
-    return data ? { ...data, fotos: fotos || [] } : null
+    const { data } = await supabase.from('registros').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+    if (data) {
+      if (fotos !== undefined) await saveFotos(data.id, rest.empreendimento_id, fotos)
+      if (nfs !== undefined || cats !== undefined) await saveArquivos(data.id, rest.empreendimento_id, nfs||[], cats||[])
+    }
+    return data ? { ...data, fotos: fotos||[], nfs: nfs||[], cats: cats||[] } : null
   } else {
-    const { data } = await supabase.from('registros').insert(rest).select().single()
-    if (data && fotos) await saveFotos(data.id, rest.empreendimento_id, fotos)
-    return data ? { ...data, fotos: fotos || [] } : null
+    const { data } = await supabase.from('registros').insert(payload).select().single()
+    if (data) {
+      if (fotos !== undefined) await saveFotos(data.id, rest.empreendimento_id, fotos)
+      if (nfs !== undefined || cats !== undefined) await saveArquivos(data.id, rest.empreendimento_id, nfs||[], cats||[])
+    }
+    return data ? { ...data, fotos: fotos||[], nfs: nfs||[], cats: cats||[] } : null
   }
 }
 export const deleteRegistro = async (id) => {
-  await supabase.from('registros').delete().eq('id', id)
-  await supabase.from('fotos').delete().eq('registro_id', id)
+  await Promise.all([
+    supabase.from('registros').delete().eq('id', id),
+    supabase.from('fotos').delete().eq('registro_id', id),
+    supabase.from('arquivos').delete().eq('registro_id', id),
+  ])
 }
 
 // ── Fotos (tabela separada para evitar payload gigante) ───────────
@@ -128,6 +150,33 @@ export const savePlanta = async (empId, pavimento, imagem, nome_arquivo) => {
 }
 export const deletePlanta = async (empId, pavimento) => {
   await supabase.from('plantas').delete().eq('empreendimento_id', empId).eq('pavimento', pavimento)
+}
+
+// ── Arquivos NFs e Catálogos (tabela separada) ───────────────────
+export const saveArquivos = async (registroId, empId, nfs, cats) => {
+  await supabase.from('arquivos').delete().eq('registro_id', registroId)
+  const rows = []
+  // NFs: salva metadados + arquivo mas sem base64 inline no registro
+  ;(nfs||[]).forEach(n => rows.push({
+    registro_id: registroId, empreendimento_id: empId, tipo: 'nf',
+    nome: n.nome||'', nome_arq: n.nomeArq||'', status: n.status||'pendente',
+    arquivo: n.arquivo||''
+  }))
+  ;(cats||[]).forEach(c => rows.push({
+    registro_id: registroId, empreendimento_id: empId, tipo: 'cat',
+    nome: c.nome||'', nome_arq: c.nomeArq||'', status: c.status||'pendente',
+    arquivo: c.arquivo||''
+  }))
+  if (rows.length > 0) {
+    const { error } = await supabase.from('arquivos').insert(rows)
+    if (error) console.error('saveArquivos error:', error)
+  }
+}
+export const getArquivos = async (empId) => {
+  const { data } = await supabase.from('arquivos')
+    .select('id,registro_id,tipo,nome,nome_arq,status,arquivo')
+    .eq('empreendimento_id', empId)
+  return data || []
 }
 
 // ── Atividades ────────────────────────────────────────────────────
