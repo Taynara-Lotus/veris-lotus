@@ -35,30 +35,20 @@ function Confirm({msg,onYes,onNo}){
   </div>
 }
 
-// Resumo de status de NFs ou Catálogos
 function DocStatusSummary({items, label}){
   if(!items||!items.length) return null
-  const counts = STATUS_DOC.reduce((acc,s)=>{
-    acc[s.value]=items.filter(i=>i.status===s.value).length
-    return acc
-  },{})
   return(
     <div style={{marginBottom:10}}>
       <div style={{fontSize:11,color:'#AAA',letterSpacing:.8,textTransform:'uppercase',marginBottom:5}}>{label} ({items.length})</div>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
         {STATUS_DOC.map(s=>{
-          const n=counts[s.value]||0
+          const n=items.filter(i=>i.status===s.value).length
           if(!n) return null
-          return(
-            <span key={s.value} style={{fontSize:10,fontWeight:700,padding:'2px 10px',borderRadius:10,background:s.color+'22',color:s.color,border:`1px solid ${s.color}44`}}>
-              {s.label}: {n}
-            </span>
-          )
+          return <span key={s.value} style={{fontSize:10,fontWeight:700,padding:'2px 10px',borderRadius:10,background:s.color+'22',color:s.color,border:`1px solid ${s.color}44`}}>{s.label}: {n}</span>
         })}
       </div>
-      {/* lista os nomes */}
       {items.map((it,i)=>(
-        <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,marginTop:4,paddingLeft:4}}>
+        <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,marginTop:3,paddingLeft:4}}>
           <span style={{color:'#888'}}>📎 {it.nomeArq||it.nome||'—'}</span>
           {statusBadge(it.status, STATUS_DOC)}
         </div>
@@ -67,12 +57,95 @@ function DocStatusSummary({items, label}){
   )
 }
 
+// ── Exportar PDF via print ────────────────────────────────────────
+function exportPDF(registros, atividades) {
+  const getColor = atv => atividades.find(a=>(a.name||a)===atv)?.color||GOLD
+  const rows = registros.map(r => `
+    <tr style="border-bottom:1px solid #eee">
+      <td style="padding:8px 10px;font-weight:700;color:${GOLD}">${r.serial||'—'}</td>
+      <td style="padding:8px 10px">${r.atividade||'—'}</td>
+      <td style="padding:8px 10px">${r.pavimento||'—'}</td>
+      <td style="padding:8px 10px">${r.junta||'—'}</td>
+      <td style="padding:8px 10px">${r.responsavel||'—'}</td>
+      <td style="padding:8px 10px">${r.horario||'—'}</td>
+      <td style="padding:8px 10px">${r.nfs?.length||0} NF(s)</td>
+      <td style="padding:8px 10px">${r.cats?.length||0} Cat.</td>
+      <td style="padding:8px 10px">${r.coments?.filter(c=>c.status==='pendente').length||0} pend.</td>
+    </tr>
+  `).join('')
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>Relatório VĒRIS — Gestão de Registros</title>
+<style>
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1A1A18; padding: 32px; }
+  h1 { font-size: 22px; font-weight: 300; letter-spacing: 2px; color: #68541F; margin-bottom: 4px; }
+  .sub { font-size: 11px; color: #aaa; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead { background: #1A1A18; color: #F7F5F0; }
+  thead th { padding: 10px; text-align: left; font-weight: 500; letter-spacing: .5px; font-size: 10px; text-transform: uppercase; }
+  tbody tr:nth-child(even) { background: #F7F5F0; }
+  .footer { margin-top: 32px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; }
+  @media print { body { padding: 16px; } }
+</style>
+</head><body>
+<h1>VĒRIS · Gestão de Registros</h1>
+<div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${registros.length} registro(s)</div>
+<table>
+  <thead><tr>
+    <th>Nº Série</th><th>Atividade</th><th>Pavimento</th><th>Junta</th>
+    <th>Responsável</th><th>Data/Hora</th><th>NFs</th><th>Catálogos</th><th>Pendentes</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="footer">VĒRIS by Lotus · Plataforma de Certificação · Relatório gerado automaticamente</div>
+</body></html>`
+
+  const w = window.open('', '_blank')
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  setTimeout(() => { w.print() }, 400)
+}
+
+// ── Exportar Excel (CSV compatível com Excel) ─────────────────────
+function exportExcel(registros) {
+  const BOM = '\uFEFF'
+  const header = ['Nº Série','Atividade','Pavimento','Junta','Responsável','Data/Hora','Fotos','NFs','Catálogos','Coment. Pendentes','UTM Zona','UTM E','UTM N','Drive'].join(';')
+  const rows = registros.map(r => [
+    r.serial||'',
+    r.atividade||'',
+    r.pavimento||'',
+    r.junta||'',
+    r.responsavel||'',
+    r.horario||'',
+    r.fotos?.length||0,
+    r.nfs?.map(n=>n.nomeArq||n.nome||'').filter(Boolean).join(' | ')||'',
+    r.cats?.map(c=>c.nomeArq||c.nome||'').filter(Boolean).join(' | ')||'',
+    r.coments?.filter(c=>c.status==='pendente').length||0,
+    r.utm_zone||'',
+    r.utm_e||'',
+    r.utm_n||'',
+    r.drive||''
+  ].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';'))
+
+  const csv = BOM + [header, ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `veris_registros_${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial}){
   const[open,setOpen]=useState(null)
   const[search,setSearch]=useState('')
   const[confirmDel,setConfirmDel]=useState(null)
   const[confirmReset,setConfirmReset]=useState(false)
   const[resetDone,setResetDone]=useState(false)
+  const[exportMenu,setExportMenu]=useState(false)
 
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
@@ -93,15 +166,43 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
 
   return(
     <div>
+      {/* Barra superior */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:10}}>
         <h2 style={{color:GOLD,margin:0,fontWeight:300,letterSpacing:1}}>Gestão de Registros</h2>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <div style={{fontSize:13,color:'#888'}}>{registros.length} registro(s)</div>
+
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar..."
-            style={{border:`1px solid ${BEIGE}`,borderRadius:6,padding:'7px 12px',fontSize:13,outline:'none',width:200}}/>
+            style={{border:`1px solid ${BEIGE}`,borderRadius:6,padding:'7px 12px',fontSize:13,outline:'none',width:180}}/>
+
+          {/* ── Botão Exportar ── */}
+          <div style={{position:'relative'}}>
+            <button onClick={()=>setExportMenu(!exportMenu)}
+              style={{background:JET,border:`1.5px solid ${JET}`,color:WHITE,borderRadius:6,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer',letterSpacing:.3,display:'flex',alignItems:'center',gap:6}}>
+              ⬇ Exportar {exportMenu?'▲':'▼'}
+            </button>
+            {exportMenu && (
+              <div style={{position:'absolute',top:'110%',right:0,background:WHITE,border:`1px solid ${BEIGE}`,borderRadius:6,boxShadow:'0 4px 20px rgba(0,0,0,.12)',zIndex:50,minWidth:180,overflow:'hidden'}}>
+                <button onClick={()=>{exportPDF(filtered,atividades);setExportMenu(false)}}
+                  style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'12px 16px',border:'none',background:'transparent',cursor:'pointer',fontSize:13,color:JET,textAlign:'left',borderBottom:`1px solid ${BEIGE}`}}
+                  onMouseEnter={e=>e.currentTarget.style.background=OFF}
+                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  📄 <div><div style={{fontWeight:600}}>PDF</div><div style={{fontSize:10,color:'#aaa'}}>Abre para imprimir / salvar</div></div>
+                </button>
+                <button onClick={()=>{exportExcel(filtered);setExportMenu(false)}}
+                  style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'12px 16px',border:'none',background:'transparent',cursor:'pointer',fontSize:13,color:JET,textAlign:'left'}}
+                  onMouseEnter={e=>e.currentTarget.style.background=OFF}
+                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  📊 <div><div style={{fontWeight:600}}>Excel / CSV</div><div style={{fontSize:10,color:'#aaa'}}>Baixa arquivo .csv</div></div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Zerar série */}
           <button onClick={()=>setConfirmReset(true)}
             style={{background:'transparent',border:'1.5px solid #C0392B',color:'#C0392B',borderRadius:6,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer',letterSpacing:.3}}>
-            {resetDone?'✅ Zerado':'🔄 Zerar nº de série'}
+            {resetDone?'✅ Zerado':'🔄 Reiniciar série'}
           </button>
         </div>
       </div>
@@ -112,40 +213,35 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
         </div>
       )}
 
+      {/* Fechar menu de exportar ao clicar fora */}
+      {exportMenu && <div onClick={()=>setExportMenu(false)} style={{position:'fixed',inset:0,zIndex:40}}/>}
+
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {filtered.map(reg=>{
           const isOpen=open===reg.id
           const cor=getColor(reg.atividade)
-          // Conta APENAS pendentes (não inclui concluídos)
           const pendentes=reg.coments?.filter(c=>c.status==='pendente').length||0
 
           return(
             <div key={reg.id} style={{border:`1px solid ${BEIGE}`,borderRadius:10,overflow:'hidden',background:WHITE,boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>
-              {/* ROW fechado */}
               <div onClick={()=>setOpen(isOpen?null:reg.id)}
                 style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',cursor:'pointer',background:isOpen?'#EDE8DF':WHITE,transition:'background .15s'}}>
                 <div style={{position:'relative',width:24,height:24,flexShrink:0}}>
                   <div style={{width:24,height:24,borderRadius:'50%',background:cor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>📷</div>
                   {pendentes>0&&(
-                    <div style={{position:'absolute',top:-4,right:-4,width:14,height:14,borderRadius:'50%',background:'#C62828',border:'1.5px solid white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:WHITE,lineHeight:1}}>
-                      {pendentes}
-                    </div>
+                    <div style={{position:'absolute',top:-4,right:-4,width:14,height:14,borderRadius:'50%',background:'#C62828',border:'1.5px solid white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:WHITE,lineHeight:1}}>{pendentes}</div>
                   )}
                 </div>
                 <div style={{minWidth:90,fontWeight:700,color:GOLD,fontSize:13}}>{reg.serial||'—'}</div>
                 <div style={{flex:1,fontSize:13,color:JET,fontWeight:500}}>{reg.atividade||'—'}</div>
-                <div style={{fontSize:12,color:'#888',minWidth:120}}>{reg.pavimento||'—'}</div>
-                {pendentes>0&&(
-                  <div style={{fontSize:10,color:'#C62828',fontWeight:600,whiteSpace:'nowrap'}}>⚠ {pendentes} pendente{pendentes>1?'s':''}</div>
-                )}
-                <div style={{fontSize:11,color:'#AAA',minWidth:130,textAlign:'right'}}>{reg.horario||'—'}</div>
+                <div style={{fontSize:12,color:'#888',minWidth:100}}>{reg.pavimento||'—'}</div>
+                {pendentes>0&&<div style={{fontSize:10,color:'#C62828',fontWeight:600,whiteSpace:'nowrap'}}>⚠ {pendentes} pend.</div>}
+                <div style={{fontSize:11,color:'#AAA',minWidth:120,textAlign:'right'}}>{reg.horario||'—'}</div>
                 <div style={{fontSize:14,color:'#CCC',marginLeft:6}}>{isOpen?'▲':'▼'}</div>
               </div>
 
-              {/* EXPANDED */}
               {isOpen&&(
                 <div style={{padding:'14px 18px',borderTop:`1px solid ${BEIGE}`,background:'#FEFEFE'}}>
-                  {/* Dados gerais */}
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
                     {[['Nº de Série',reg.serial],['Responsável',reg.responsavel],['Pavimento',reg.pavimento],['Atividade',reg.atividade],['Junta',reg.junta],['Criado em',reg.horario]].map(([k,v])=>v?(
                       <div key={k}>
@@ -167,7 +263,6 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
                     </div>}
                   </div>
 
-                  {/* Fotos */}
                   {reg.fotos?.length>0&&<div style={{marginBottom:12}}>
                     <div style={{fontSize:11,color:'#AAA',letterSpacing:.8,textTransform:'uppercase',marginBottom:6}}>Fotos ({reg.fotos.length})</div>
                     <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
@@ -181,21 +276,13 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
                     </div>
                   </div>}
 
-                  {/* [FIX] Resumo NFs com status */}
-                  {reg.nfs?.length>0&&(
-                    <DocStatusSummary items={reg.nfs} label="Notas Fiscais"/>
-                  )}
+                  {reg.nfs?.length>0&&<DocStatusSummary items={reg.nfs} label="Notas Fiscais"/>}
+                  {reg.cats?.length>0&&<DocStatusSummary items={reg.cats} label="Catálogos Técnicos"/>}
 
-                  {/* [FIX] Resumo Catálogos com status */}
-                  {reg.cats?.length>0&&(
-                    <DocStatusSummary items={reg.cats} label="Catálogos Técnicos"/>
-                  )}
-
-                  {/* Comentários */}
                   {reg.coments?.length>0&&<div style={{marginBottom:10}}>
                     <div style={{fontSize:11,color:'#AAA',letterSpacing:.8,textTransform:'uppercase',marginBottom:6}}>
                       Comentários ({reg.coments.length})
-                      {pendentes>0&&<span style={{marginLeft:8,background:'#C62828',color:WHITE,borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{pendentes} pendente{pendentes>1?'s':''}</span>}
+                      {pendentes>0&&<span style={{marginLeft:8,background:'#C62828',color:WHITE,borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{pendentes} pend.</span>}
                     </div>
                     {reg.coments.map((c,i)=>(
                       <div key={i} style={{background:OFF,borderRadius:6,padding:'10px 12px',marginBottom:6,fontSize:12,borderLeft:`3px solid ${STATUS_COMENT.find(s=>s.value===c.status)?.color||BEIGE}`}}>
@@ -229,9 +316,8 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
         onNo={()=>setConfirmDel(null)}
       />}
 
-      {/* [FIX] Reset serial — chama função que persiste no Supabase */}
       {confirmReset&&<Confirm
-        msg="Isso irá zerar o contador de nº de série. Os próximos registros começarão do #000001. Os registros existentes não são alterados. Confirmar?"
+        msg="Isso irá reiniciar o contador de nº de série. Só é permitido quando não há registros no empreendimento. Confirmar?"
         onYes={()=>{
           if(onResetSerial) onResetSerial()
           setResetDone(true)
