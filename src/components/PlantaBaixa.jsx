@@ -162,7 +162,7 @@ function CameraIcon({reg,onClick,style}){
   )
 }
 
-function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome,plantaUpdatedAt}){
+function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome,plantaUpdatedAt,empId}){
   const[fotos,setFotos]=useState(existing?.fotos||[])
   const horario=existing?.horario||nowStr()
   const[junta,setJunta]=useState(existing?.junta||'')
@@ -177,7 +177,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const[coments,setComents]=useState(existing?.coments||[])
   const[drive,setDrive]=useState(existing?.drive||'')
   const[confirmDel,setConfirmDel]=useState(false)
-  const serial=existing?.serial||nextSerial()
+  const serial=existing?.serial||nextSerial(empId)
 
   const handleGetUTM=()=>{
     if(!navigator.geolocation){alert('Geolocalização não disponível.');return}
@@ -332,7 +332,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   )
 }
 
-export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta}){
+export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId}){
   const canvasRef=useRef()
   const fileRef=useRef()
   const[addPav,setAddPav]=useState(false)
@@ -382,7 +382,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   }
 
   const handleImgClick=e=>{
-    if(modal||iconClicked||!planta) return
+    if(modal||iconClicked) return
     const rect=canvasRef.current.getBoundingClientRect()
     const x=((e.clientX-rect.left-pan.x)/zoom)/rect.width*100
     const y=((e.clientY-rect.top-pan.y)/zoom)/rect.height*100
@@ -474,16 +474,24 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
           onMouseUp={()=>setDragging(false)}
           onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         >
-          {!planta?(
+          {!planta && regsAtivos.length===0 ?(
             <div onClick={()=>fileRef.current.click()} style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#BBB',gap:10}}>
               <div style={{fontSize:44}}>🗺️</div>
               <div style={{fontSize:14}}>Adicionar planta para <b>{pavAtivo}</b></div>
             </div>
           ):(
-            <div style={{position:'relative'}}>
-              <div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}} onClick={handleImgClick}>
-                <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
-              </div>
+            <div style={{position:'relative',minHeight:440}} onClick={handleImgClick}>
+              {/* Imagem da planta (se carregada) */}
+              {planta
+                ? <div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}}>
+                    <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
+                  </div>
+                : <div style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#CCC',gap:8,pointerEvents:'none'}}>
+                    <div style={{fontSize:32}}>🗺️</div>
+                    <div style={{fontSize:12}}>{plantaObj?.loading?'Carregando planta...':'Clique para adicionar planta'}</div>
+                  </div>
+              }
+              {/* Ícones dos registros — sempre visíveis independente da planta */}
               {regsAtivos.map(reg=>(
                 <CameraIcon key={reg.id} reg={reg}
                   onClick={e=>{e.stopPropagation();setIconClicked(reg.id);}}
@@ -506,8 +514,8 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
-      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
+      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
     </div>
   )
 }
