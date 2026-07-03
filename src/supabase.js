@@ -4,6 +4,15 @@ const SUPABASE_URL = 'https://hkklfxxayuvtmqjhwogh.supabase.co'
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhra2xmeHhheXV2dG1xamh3b2doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NTMwMjUsImV4cCI6MjA5ODIyOTAyNX0.6I54MWY-xHFYvNKnWYWnPjaafiGDQOIY4d8oHtQ0fZE'
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+// ── Sanitiza nome para Storage (remove caracteres inválidos) ────────
+function sanitizePath(str) {
+  return (str||'arquivo')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // remove acentos
+    .replace(/[^a-zA-Z0-9._-]/g, '_')                // substitui especiais por _
+    .replace(/_+/g, '_')                              // colapsa múltiplos _
+    .substring(0, 80)                                 // limita tamanho
+}
+
 // ── Upload para Supabase Storage (resolve timeout de base64) ──────
 async function uploadToStorage(base64, fileName, path) {
   try {
@@ -115,7 +124,7 @@ export const saveRegistro = async (registro) => {
     for (const f of (fotos||[])) {
       let url = f.url || ''
       if (!url && f.data?.startsWith('data:')) {
-        const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${f.nome||'foto'}`
+        const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${sanitizePath(f.nome||'foto')}`
         url = await uploadToStorage(f.data, f.nome, path) || ''
       }
       await supabase.from('fotos').insert({ registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url })
@@ -132,7 +141,7 @@ export const saveRegistro = async (registro) => {
     for (const arq of allArqs) {
       let arquivo_url = arq.arquivo_url || ''
       if (!arquivo_url && arq.arquivo?.startsWith('data:')) {
-        const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${arq.nomeArq||'arquivo'}`
+        const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${sanitizePath(arq.nomeArq||'arquivo')}`
         arquivo_url = await uploadToStorage(arq.arquivo, arq.nomeArq, path) || ''
       }
       const { error } = await supabase.from('arquivos').insert({
