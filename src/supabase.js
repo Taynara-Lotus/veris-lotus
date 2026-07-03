@@ -205,7 +205,8 @@ export const saveAtividade = async (empId, nome, cor) => {
   if (ex?.id) {
     await supabase.from('atividades').update({ cor }).eq('id', ex.id)
   } else {
-    await supabase.from('atividades').insert({ empreendimento_id: empId, nome, cor })
+    const { error } = await supabase.from('atividades').insert({ empreendimento_id: empId, nome, cor })
+    if (error && error.code !== '23505') console.error('saveAtividade error:', error.message)
   }
 }
 export const deleteAtividade = async (empId, nome) => {
@@ -219,7 +220,10 @@ export const getJuntas = async (empId) => {
 }
 export const saveJunta = async (empId, nome) => {
   const { data: ex } = await supabase.from('juntas').select('id').eq('empreendimento_id', empId).eq('nome', nome).maybeSingle()
-  if (!ex?.id) await supabase.from('juntas').insert({ empreendimento_id: empId, nome })
+  if (!ex?.id) {
+    const { error } = await supabase.from('juntas').insert({ empreendimento_id: empId, nome })
+    if (error && error.code !== '23505') console.error('saveJunta error:', error.message)
+  }
 }
 export const deleteJunta = async (empId, nome) => {
   await supabase.from('juntas').delete().eq('empreendimento_id', empId).eq('nome', nome)
