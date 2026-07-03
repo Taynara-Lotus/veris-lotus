@@ -4,11 +4,23 @@ const SUPABASE_URL = 'https://hkklfxxayuvtmqjhwogh.supabase.co'
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhra2xmeHhheXV2dG1xamh3b2doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2NTMwMjUsImV4cCI6MjA5ODIyOTAyNX0.6I54MWY-xHFYvNKnWYWnPjaafiGDQOIY4d8oHtQ0fZE'
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+// ── Upload para Supabase Storage (resolve timeout de base64) ──────
+async function uploadToStorage(base64, fileName, path) {
+  try {
+    const res = await fetch(base64)
+    const blob = await res.blob()
+    const { data, error } = await supabase.storage
+      .from('arquivos-veris')
+      .upload(path, blob, { upsert: true, contentType: blob.type })
+    if (error) { console.error('Storage upload error:', error.message); return null }
+    const { data: urlData } = supabase.storage.from('arquivos-veris').getPublicUrl(path)
+    return urlData?.publicUrl || null
+  } catch(e) { console.error('Storage exception:', e); return null }
+}
+
 // ── Empreendimentos ───────────────────────────────────────────────
 export const getEmpreendimentos = async () => {
-  // Não traz a foto (base64 pesado) na listagem — só id, nome, cidade etc.
-  const { data } = await supabase
-    .from('empreendimentos')
+  const { data } = await supabase.from('empreendimentos')
     .select('id,nome,cidade,estado,pais,cert,nivel,foto,arquivado,created_at')
     .order('created_at', { ascending: true })
   return data || []
@@ -18,10 +30,9 @@ export const saveEmpreendimento = async (emp) => {
   if (id) {
     const { data } = await supabase.from('empreendimentos').update(rest).eq('id', id).select().single()
     return data
-  } else {
-    const { data } = await supabase.from('empreendimentos').insert(rest).select().single()
-    return data
   }
+  const { data } = await supabase.from('empreendimentos').insert(rest).select().single()
+  return data
 }
 export const deleteEmpreendimento = async (id) => {
   await supabase.from('empreendimentos').delete().eq('id', id)
@@ -37,75 +48,105 @@ export const saveObra = async (obra) => {
   if (id) {
     const { data } = await supabase.from('obras').update(rest).eq('id', id).select().single()
     return data
-  } else {
-    const { data } = await supabase.from('obras').insert(rest).select().single()
-    return data
   }
+  const { data } = await supabase.from('obras').insert(rest).select().single()
+  return data
 }
 
-// ── Registros — sem fotos/anexos na listagem (carrega sob demanda) ─
+// ── Registros ─────────────────────────────────────────────────────
 export const getRegistros = async (empId) => {
-  const { data } = await supabase
-    .from('registros')
-    .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,nfs,cats,x,y,empreendimento_id,created_at,updated_at')
+  const { data } = await supabase.from('registros')
+    .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,x,y,empreendimento_id,created_at,updated_at')
     .eq('empreendimento_id', empId)
     .order('created_at', { ascending: false })
   if (!data) return []
-  // Carrega fotos de cada registro (lazy — só IDs e nomes, sem data pesada)
-  const fotosData = await supabase.from('fotos').select('id,registro_id,nome,data').eq('empreendimento_id', empId)
-  const fotosMap = {}
-  ;(fotosData.data || []).forEach(f => {
+
+  // Carrega fotos e arquivos em paralelo
+  const [fotosRes, arquivosRes] = await Promise.all([
+    supabase.from('fotos').select('registro_id,nome,url').eq('empreendimento_id', empId),
+    supabase.from('arquivos').select('registro_id,tipo,nome,nome_arq,status,arquivo_url').eq('empreendimento_id', empId)
+  ])
+
+  const fotosMap = {}, nfsMap = {}, catsMap = {}
+  ;(fotosRes.data||[]).forEach(f => {
     if (!fotosMap[f.registro_id]) fotosMap[f.registro_id] = []
-    fotosMap[f.registro_id].push({ data: f.data, nome: f.nome })
+    fotosMap[f.registro_id].push({ nome: f.nome, url: f.url })
   })
-  // Carrega arquivos (nfs e cats)
-  const arquivosData = await supabase.from('arquivos').select('*').eq('empreendimento_id', empId)
-  const nfsMap = {}, catsMap = {}
-  ;(arquivosData.data || []).forEach(a => {
-    const item = { nome: a.nome, nomeArq: a.nome_arq, status: a.status, arquivo: a.arquivo }
-    if (a.tipo === 'nf') { if (!nfsMap[a.registro_id]) nfsMap[a.registro_id] = []; nfsMap[a.registro_id].push(item) }
-    else { if (!catsMap[a.registro_id]) catsMap[a.registro_id] = []; catsMap[a.registro_id].push(item) }
+  ;(arquivosRes.data||[]).forEach(a => {
+    const item = { nome: a.nome, nomeArq: a.nome_arq, status: a.status, arquivo_url: a.arquivo_url }
+    if (a.tipo === 'nf') {
+      if (!nfsMap[a.registro_id]) nfsMap[a.registro_id] = []
+      nfsMap[a.registro_id].push(item)
+    } else {
+      if (!catsMap[a.registro_id]) catsMap[a.registro_id] = []
+      catsMap[a.registro_id].push(item)
+    }
   })
-  return data.map(r => ({ ...r, fotos: fotosMap[r.id]||[], nfs: nfsMap[r.id]||[], cats: catsMap[r.id]||[] }))
+
+  return data.map(r => ({
+    ...r,
+    fotos: fotosMap[r.id] || [],
+    nfs: nfsMap[r.id] || [],
+    cats: catsMap[r.id] || []
+  }))
 }
+
 export const saveRegistro = async (registro) => {
   const { id, fotos, nfs, cats, ...rest } = registro
-  const payload = { ...rest }
-  delete payload.nfs
-  delete payload.cats
   const empId = rest.empreendimento_id
+  const payload = { ...rest }
 
-  // Faz upload dos arquivos com base64 para Storage antes de salvar
-  const processArquivos = async (items, tipo, regId) => {
-    return Promise.all((items||[]).map(async item => {
-      if (item.arquivo && item.arquivo.startsWith('data:') && !item.arquivo_url) {
-        const url = await uploadArquivo(empId, regId, tipo, item.arquivo, item.nomeArq||'arquivo')
-        return { ...item, arquivo_url: url||'', arquivo: '' }
-      }
-      return { ...item, arquivo: '' } // nunca salva base64 no DB
-    }))
-  }
-
+  let savedData = null
   if (id) {
-    const { data } = await supabase.from('registros').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id).select().single()
-    if (data) {
-      if (fotos !== undefined) await saveFotos(data.id, empId, fotos)
-      const nfsProc = await processArquivos(nfs, 'nf', data.id)
-      const catsProc = await processArquivos(cats, 'cat', data.id)
-      await saveArquivos(data.id, empId, nfsProc, catsProc)
-    }
-    return data ? { ...data, fotos: fotos||[], nfs: nfs||[], cats: cats||[] } : null
+    const { data } = await supabase.from('registros')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', id).select().single()
+    savedData = data
   } else {
     const { data } = await supabase.from('registros').insert(payload).select().single()
-    if (data) {
-      if (fotos !== undefined) await saveFotos(data.id, empId, fotos)
-      const nfsProc = await processArquivos(nfs, 'nf', data.id)
-      const catsProc = await processArquivos(cats, 'cat', data.id)
-      await saveArquivos(data.id, empId, nfsProc, catsProc)
-    }
-    return data ? { ...data, fotos: fotos||[], nfs: nfs||[], cats: cats||[] } : null
+    savedData = data
   }
+
+  if (!savedData) return null
+
+  // Salva fotos no Storage (fire and forget se der erro)
+  if (fotos !== undefined) {
+    await supabase.from('fotos').delete().eq('registro_id', savedData.id)
+    for (const f of (fotos||[])) {
+      let url = f.url || ''
+      if (!url && f.data?.startsWith('data:')) {
+        const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${f.nome||'foto'}`
+        url = await uploadToStorage(f.data, f.nome, path) || ''
+      }
+      await supabase.from('fotos').insert({ registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url })
+    }
+  }
+
+  // Salva arquivos NFs e Cats no Storage
+  if (nfs !== undefined || cats !== undefined) {
+    await supabase.from('arquivos').delete().eq('registro_id', savedData.id)
+    const allArqs = [
+      ...(nfs||[]).map(n => ({ ...n, tipo: 'nf' })),
+      ...(cats||[]).map(c => ({ ...c, tipo: 'cat' }))
+    ]
+    for (const arq of allArqs) {
+      let arquivo_url = arq.arquivo_url || ''
+      if (!arquivo_url && arq.arquivo?.startsWith('data:')) {
+        const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${arq.nomeArq||'arquivo'}`
+        arquivo_url = await uploadToStorage(arq.arquivo, arq.nomeArq, path) || ''
+      }
+      const { error } = await supabase.from('arquivos').insert({
+        registro_id: savedData.id, empreendimento_id: empId,
+        tipo: arq.tipo, nome: arq.nome||'', nome_arq: arq.nomeArq||'',
+        status: arq.status||'pendente', arquivo_url
+      })
+      if (error) console.error('saveArquivo error:', error.message)
+    }
+  }
+
+  return { ...savedData, fotos: fotos||[], nfs: nfs||[], cats: cats||[] }
 }
+
 export const deleteRegistro = async (id) => {
   await Promise.all([
     supabase.from('registros').delete().eq('id', id),
@@ -114,26 +155,10 @@ export const deleteRegistro = async (id) => {
   ])
 }
 
-// ── Fotos (tabela separada para evitar payload gigante) ───────────
-export const getFotos = async (registroId) => {
-  const { data } = await supabase.from('fotos').select('id,nome,data').eq('registro_id', registroId).order('created_at')
-  return data || []
-}
-export const saveFotos = async (registroId, empId, fotos) => {
-  // Remove fotos antigas e insere as novas
-  await supabase.from('fotos').delete().eq('registro_id', registroId)
-  if (fotos && fotos.length > 0) {
-    const rows = fotos.map(f => ({ registro_id: registroId, empreendimento_id: empId, data: f.data, nome: f.nome }))
-    await supabase.from('fotos').insert(rows)
-  }
-}
-
-// ── Plantas — sem imagem na listagem, carrega sob demanda ─────────
+// ── Plantas ───────────────────────────────────────────────────────
 export const getPlantasMeta = async (empId) => {
-  // Busca só metadados (nome, pavimento, updated_at) — rápido
-  const { data } = await supabase
-    .from('plantas')
-    .select('id,pavimento,nome_arquivo,updated_at,empreendimento_id')
+  const { data } = await supabase.from('plantas')
+    .select('id,pavimento,nome_arquivo,updated_at')
     .eq('empreendimento_id', empId)
   if (!data) return {}
   return data.reduce((acc, row) => {
@@ -142,80 +167,22 @@ export const getPlantasMeta = async (empId) => {
   }, {})
 }
 export const getPlantaImagem = async (empId, pavimento) => {
-  // Carrega a imagem só quando necessário
-  const { data } = await supabase
-    .from('plantas')
-    .select('imagem')
-    .eq('empreendimento_id', empId)
-    .eq('pavimento', pavimento)
-    .maybeSingle()
+  const { data } = await supabase.from('plantas')
+    .select('imagem').eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
   return data?.imagem || null
 }
 export const savePlanta = async (empId, pavimento, imagem, nome_arquivo) => {
-  // Tenta update primeiro, se não existir faz insert
-  const { data: existing } = await supabase.from('plantas').select('id').eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
+  const { data: existing } = await supabase.from('plantas').select('id')
+    .eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
   const payload = { empreendimento_id: empId, pavimento, imagem, nome_arquivo, updated_at: new Date().toISOString() }
   if (existing?.id) {
-    const { error } = await supabase.from('plantas').update(payload).eq('id', existing.id)
-    if (error) console.error('savePlanta update error:', error)
+    await supabase.from('plantas').update(payload).eq('id', existing.id)
   } else {
-    const { error } = await supabase.from('plantas').insert(payload)
-    if (error) console.error('savePlanta insert error:', error)
+    await supabase.from('plantas').insert(payload)
   }
 }
 export const deletePlanta = async (empId, pavimento) => {
   await supabase.from('plantas').delete().eq('empreendimento_id', empId).eq('pavimento', pavimento)
-}
-
-// ── Arquivos NFs e Catálogos (tabela separada) ───────────────────
-export const saveArquivos = async (registroId, empId, nfs, cats) => {
-  await supabase.from('arquivos').delete().eq('registro_id', registroId)
-  
-  const allItems = [
-    ...(nfs||[]).map(n => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'nf', nome: n.nome||'', nome_arq: n.nomeArq||'', status: n.status||'pendente', arquivo_url: n.arquivo_url||'', arquivo: '' })),
-    ...(cats||[]).map(c => ({ registro_id: registroId, empreendimento_id: empId, tipo: 'cat', nome: c.nome||'', nome_arq: c.nomeArq||'', status: c.status||'pendente', arquivo_url: c.arquivo_url||'', arquivo: '' }))
-  ]
-  
-  for (const item of allItems) {
-    const { error } = await supabase.from('arquivos').insert(item)
-    if (error) console.error('saveArquivos item error:', error.message)
-  }
-}
-
-// Upload de arquivo para Supabase Storage
-export const uploadArquivo = async (empId, registroId, tipo, file, fileName) => {
-  try {
-    // Converte base64 para blob
-    let blob
-    if (file.startsWith('data:')) {
-      const res = await fetch(file)
-      blob = await res.blob()
-    } else {
-      blob = new Blob([file])
-    }
-    
-    const path = `${empId}/${registroId}/${tipo}/${Date.now()}_${fileName}`
-    const { data, error } = await supabase.storage
-      .from('arquivos-veris')
-      .upload(path, blob, { upsert: true })
-    
-    if (error) {
-      console.error('uploadArquivo error:', error.message)
-      return null
-    }
-    
-    const { data: urlData } = supabase.storage.from('arquivos-veris').getPublicUrl(path)
-    return urlData?.publicUrl || null
-  } catch (e) {
-    console.error('uploadArquivo exception:', e)
-    return null
-  }
-}
-export const getArquivos = async (empId) => {
-  const { data } = await supabase.from('arquivos')
-    .select('id,registro_id,tipo,nome,nome_arq,status,arquivo')
-    .eq('empreendimento_id', empId)
-  return data || []
 }
 
 // ── Atividades ────────────────────────────────────────────────────
@@ -223,11 +190,14 @@ export const getAtividades = async (empId) => {
   const { data } = await supabase.from('atividades').select('*').eq('empreendimento_id', empId).order('nome')
   return data || []
 }
-// Helper para converter formato do banco para formato do componente
-export const mapAtividades = (data) => data.map(a => ({ name: a.nome || a.name, color: a.cor || a.color }))
+export const mapAtividades = (data) => data.map(a => ({ name: a.nome||a.name, color: a.cor||a.color }))
 export const saveAtividade = async (empId, nome, cor) => {
-  const { data } = await supabase.from('atividades').upsert({ empreendimento_id: empId, nome, cor }, { onConflict: 'empreendimento_id,nome' }).select().single()
-  return data
+  const { data: ex } = await supabase.from('atividades').select('id').eq('empreendimento_id', empId).eq('nome', nome).maybeSingle()
+  if (ex?.id) {
+    await supabase.from('atividades').update({ cor }).eq('id', ex.id)
+  } else {
+    await supabase.from('atividades').insert({ empreendimento_id: empId, nome, cor })
+  }
 }
 export const deleteAtividade = async (empId, nome) => {
   await supabase.from('atividades').delete().eq('empreendimento_id', empId).eq('nome', nome)
@@ -239,8 +209,8 @@ export const getJuntas = async (empId) => {
   return data || []
 }
 export const saveJunta = async (empId, nome) => {
-  const { data } = await supabase.from('juntas').upsert({ empreendimento_id: empId, nome }, { onConflict: 'empreendimento_id,nome' }).select().single()
-  return data
+  const { data: ex } = await supabase.from('juntas').select('id').eq('empreendimento_id', empId).eq('nome', nome).maybeSingle()
+  if (!ex?.id) await supabase.from('juntas').insert({ empreendimento_id: empId, nome })
 }
 export const deleteJunta = async (empId, nome) => {
   await supabase.from('juntas').delete().eq('empreendimento_id', empId).eq('nome', nome)
@@ -253,7 +223,6 @@ export const getSerialCounter = async (empId) => {
 }
 export const setSerialCounter = async (empId, value) => {
   const key = `serial_${empId}`
-  // Tenta update, se não existir faz insert
   const { data: ex } = await supabase.from('config').select('id').eq('key', key).maybeSingle()
   if (ex?.id) {
     await supabase.from('config').update({ value: String(value) }).eq('id', ex.id)
@@ -264,40 +233,35 @@ export const setSerialCounter = async (empId, value) => {
 
 // ── Usuários ──────────────────────────────────────────────────────
 export const getUsuarios = async () => {
-  const { data } = await supabase.from('usuarios').select('id,nome,email,telefone,role,initials,projeto,created_at').order('nome')
+  const { data } = await supabase.from('usuarios')
+    .select('id,nome,email,telefone,role,initials,projeto,created_at').order('nome')
   return data || []
 }
 export const loginUsuario = async (email, senha) => {
-  const { data } = await supabase.from('usuarios').select('*').eq('email', email).eq('senha', senha).maybeSingle()
+  const { data } = await supabase.from('usuarios').select('*')
+    .eq('email', email).eq('senha', senha).maybeSingle()
   return data || null
 }
 export const saveUsuario = async (usuario) => {
   const { id, _newSenha, ...rest } = usuario
-  // Se tem nova senha, aplica
   const payload = _newSenha ? { ...rest, senha: _newSenha } : rest
   if (id) {
     const { data } = await supabase.from('usuarios').update(payload).eq('id', id).select().single()
     return data
-  } else {
-    const { data } = await supabase.from('usuarios').insert(payload).select().single()
-    return data
   }
+  const { data } = await supabase.from('usuarios').insert(payload).select().single()
+  return data
 }
 
-// ── Logs — fire and forget (não bloqueia UI) ──────────────────────
+// ── Logs ──────────────────────────────────────────────────────────
 export const getLogs = async (empId) => {
-  const { data } = await supabase
-    .from('logs')
+  const { data } = await supabase.from('logs')
     .select('id,usuario,acao,detalhe,created_at')
     .eq('empreendimento_id', empId)
     .order('created_at', { ascending: false })
-    .limit(200) // limita para não carregar histórico infinito
+    .limit(200)
   return data || []
 }
 export const addLog = (empId, usuario, acao, detalhe = '') => {
-  // Fire and forget — não usa await para não bloquear a UI
-  supabase.from('logs').insert({
-    empreendimento_id: empId, usuario, acao, detalhe,
-    created_at: new Date().toISOString()
-  }).then(() => {})
+  supabase.from('logs').insert({ empreendimento_id: empId, usuario, acao, detalhe, created_at: new Date().toISOString() }).then(() => {})
 }
