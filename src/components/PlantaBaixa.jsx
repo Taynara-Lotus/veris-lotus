@@ -191,7 +191,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   }
 
   const readFile=(f,cb)=>{const r=new FileReader();r.onload=ev=>cb(ev.target.result,f.name);r.readAsDataURL(f);}
-  const addFotos=e=>Array.from(e.target.files).forEach(f=>readFile(f,(d,nm)=>setFotos(prev=>[...prev,{data:d,nome:nm}])))
+  const addFotos=e=>Array.from(e.target.files).forEach(f=>readFile(f,(d,nm)=>setFotos(prev=>[...prev,{data:d,url:'',nome:nm}])))
   const removeFoto=i=>setFotos(fotos.filter((_,j)=>j!==i))
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
@@ -216,7 +216,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
               {fotos.map((f,i)=>(
                 <div key={i} style={{position:'relative',width:90,height:70}}>
-                  <img src={f.data} alt={f.nome} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:6,border:`1px solid ${BEIGE}`}}/>
+                  <img src={f.url||f.data||''} alt={f.nome} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:6,border:`1px solid ${BEIGE}`}}/>
                   <button onClick={()=>removeFoto(i)} style={{position:'absolute',top:-5,right:-5,width:18,height:18,borderRadius:'50%',background:'#C0392B',border:'none',color:WHITE,fontSize:11,cursor:'pointer'}}>✕</button>
                 </div>
               ))}
@@ -262,8 +262,14 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
                 {/* STATUS do documento */}
                 <StatusDocSel value={n.status} onChange={v=>setNfs(nfs.map((x,j)=>j===i?{...x,status:v}:x))}/>
                 {n.nomeArq
-                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>📎 {n.nomeArq} {docStatusBadge(n.status)}</div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar PDF<input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm}:x)));}} /></label>
+                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>
+                    {n.arquivo_url
+                      ?<a href={n.arquivo_url} target="_blank" rel="noreferrer" style={{color:GOLD}}>📎 {n.nomeArq}</a>
+                      :<span>📎 {n.nomeArq}</span>
+                    }
+                    {docStatusBadge(n.status)}
+                  </div>
+                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar PDF<input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)));}} /></label>
                 }
               </div>
             ))}
@@ -279,8 +285,14 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
                 {/* STATUS do catálogo */}
                 <StatusDocSel value={c.status} onChange={v=>setCats(cats.map((x,j)=>j===i?{...x,status:v}:x))}/>
                 {c.nomeArq
-                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>📎 {c.nomeArq} {docStatusBadge(c.status)}</div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar Arquivo<input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm}:x)));}} /></label>
+                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>
+                    {c.arquivo_url
+                      ?<a href={c.arquivo_url} target="_blank" rel="noreferrer" style={{color:GOLD}}>📎 {c.nomeArq}</a>
+                      :<span>📎 {c.nomeArq}</span>
+                    }
+                    {docStatusBadge(c.status)}
+                  </div>
+                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar Arquivo<input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)));}} /></label>
                 }
               </div>
             ))}
