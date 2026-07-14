@@ -268,8 +268,8 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
                     <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
                       {reg.fotos.map((f,i)=>(
                         <div key={i} style={{position:'relative'}}>
-                          <img src={f.data} alt={f.nome} style={{width:100,height:75,objectFit:'cover',borderRadius:6,border:`1px solid ${BEIGE}`}}/>
-                          <button onClick={()=>downloadFile(f.data,f.nome||`foto_${i+1}.jpg`)}
+                          <img src={f.url||f.data||''} alt={f.nome} style={{width:100,height:75,objectFit:'cover',borderRadius:6,border:`1px solid ${BEIGE}`}}/>
+                          <button onClick={()=>{ if(f.url) window.open(f.url,'_blank'); else downloadFile(f.data,f.nome||`foto_${i+1}.jpg`) }}
                             style={{position:'absolute',bottom:4,right:4,background:'rgba(0,0,0,.6)',border:'none',color:WHITE,borderRadius:4,padding:'2px 5px',fontSize:10,cursor:'pointer'}}>⬇</button>
                         </div>
                       ))}
