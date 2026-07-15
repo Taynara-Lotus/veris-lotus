@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { nextSerial } from '../App'
 
 const GOLD='#68541F',GOLD2='#8B6F2E',BEIGE='#CDC9B8',BEIGE2='#EDE8DF'
 const JET='#1A1A18',JET2='#2C2C28',WHITE='#FFFFFF',OFF='#F7F5F0'
@@ -10,7 +11,6 @@ const STATUS_COMENT=[
   {value:'pendente', label:'Pendente', color:'#C62828'},
   {value:'a_iniciar',label:'A iniciar',color:'#E65100'},
 ]
-
 const STATUS_DOC=[
   {value:'pendente',     label:'Pendente',     color:'#C62828'},
   {value:'validar',      label:'Validar',      color:'#E65100'},
@@ -40,8 +40,6 @@ function latLngToUTM(lat,lng){
 function nowStr(){return new Date().toLocaleString('pt-BR')}
 function fmtDate(iso){return iso?new Date(iso).toLocaleString('pt-BR'):''}
 
-import { nextSerial } from '../App'
-
 function Btn({children,onClick,color=GOLD,small,outline,disabled,danger}){
   const c=danger?'#C0392B':color
   return <button onClick={onClick} disabled={disabled} style={{background:outline?'transparent':c,color:outline?c:WHITE,border:`1.5px solid ${c}`,borderRadius:6,padding:small?'4px 12px':'9px 22px',fontSize:small?12:13,fontWeight:600,cursor:disabled?'not-allowed':'pointer',opacity:disabled?.5:1,transition:'all .2s',letterSpacing:.4}}>{children}</button>
@@ -54,7 +52,7 @@ function Inp({label,value,onChange,type='text',placeholder}){
   </div>
 }
 
-function StatusDocSel({value, onChange}){
+function StatusDocSel({value,onChange}){
   return(
     <div style={{marginBottom:8}}>
       <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4,letterSpacing:.5,textTransform:'uppercase'}}>Status</label>
@@ -124,6 +122,18 @@ function Sel({label,value,onChange,options,allowNew,onAddNew,onRemove,withColor}
   </div>
 }
 
+// Seleção de usuário por dropdown
+function UserSel({label,value,onChange,usuarios}){
+  return <div style={{marginBottom:10}}>
+    {label&&<label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>{label}</label>}
+    <select value={value||''} onChange={e=>onChange(e.target.value)}
+      style={{width:'100%',border:'1px solid #D4C9B0',borderRadius:6,padding:'7px 10px',fontSize:13,background:WHITE}}>
+      <option value=''>— selecione —</option>
+      {usuarios.map(u=><option key={u.id||u.nome} value={u.nome}>{u.nome}</option>)}
+    </select>
+  </div>
+}
+
 function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros}){
   const ordered=[...pavimentos].reverse()
   const getH=p=>p==='Cobertura'?28:/subsolo/i.test(p)?18:p==='Mezanino'?20:21
@@ -149,7 +159,6 @@ function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros}){
 }
 
 function CameraIcon({reg,onClick,style}){
-  // Conta só pendentes (excluindo concluídos)
   const pendentes=reg.coments?.filter(c=>c.status==='pendente').length||0
   return(
     <div onClick={onClick} title={`${reg.serial||''} · ${reg.atividade||'Registro'}`}
@@ -162,7 +171,7 @@ function CameraIcon({reg,onClick,style}){
   )
 }
 
-function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome,plantaUpdatedAt,empId}){
+function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome,plantaUpdatedAt,empId,usuarios}){
   const[fotos,setFotos]=useState(existing?.fotos||[])
   const horario=existing?.horario||nowStr()
   const[junta,setJunta]=useState(existing?.junta||'')
@@ -177,6 +186,8 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const[coments,setComents]=useState(existing?.coments||[])
   const[drive,setDrive]=useState(existing?.drive||'')
   const[confirmDel,setConfirmDel]=useState(false)
+  // Estado de edição de comentário
+  const[editingComent,setEditingComent]=useState(null) // índice do comentário sendo editado
   const serial=existing?.serial||nextSerial(empId)
 
   const handleGetUTM=()=>{
@@ -199,6 +210,13 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
     onSave({fotos,horario,junta,pavimento,geo_lat:geo?.lat,geo_lng:geo?.lng,utm_zone:utmCoord?.zone,utm_e:utmCoord?.E,utm_n:utmCoord?.N,atividade,responsavel,nfs,cats,coments,drive,serial})
   }
 
+  // Adicionar novo comentário vazio
+  const addComent=()=>{
+    const novo={data:new Date().toISOString().slice(0,10),usuario:'',responsavel:'',descricao:'',status:'a_iniciar',editando:true}
+    setComents([...coments,novo])
+    setEditingComent(coments.length)
+  }
+
   return(
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center'}}>
       <div style={{background:WHITE,borderRadius:14,width:'min(600px,97vw)',maxHeight:'92vh',overflowY:'auto',boxShadow:'0 12px 60px rgba(0,0,0,.4)'}}>
@@ -216,7 +234,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
             <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:10}}>
               {fotos.map((f,i)=>(
                 <div key={i} style={{position:'relative',width:90,height:70}}>
-                  <img src={f.url||f.data||''} alt={f.nome} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:6,border:`1px solid ${BEIGE}`}}/>
+                  <img src={f.url||f.data||''} alt={f.nome} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:6,border:`1px solid ${BEIGE}`}} onError={e=>e.target.style.display='none'}/>
                   <button onClick={()=>removeFoto(i)} style={{position:'absolute',top:-5,right:-5,width:18,height:18,borderRadius:'50%',background:'#C0392B',border:'none',color:WHITE,fontSize:11,cursor:'pointer'}}>✕</button>
                 </div>
               ))}
@@ -243,7 +261,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
                 </button>
               </div>
             }
-            <Inp label="Responsável pelo Registro" value={responsavel} onChange={setResp}/>
+            <UserSel label="Responsável pelo Registro" value={responsavel} onChange={setResp} usuarios={usuarios}/>
             <Sel label="Junta" value={junta} onChange={setJunta} options={juntas} allowNew onAddNew={v=>onSaveJunta(v)} onRemove={v=>onDeleteJunta(v)}/>
             <Inp label="Pavimento" value={pavimento} onChange={setPav}/>
             <Sel label="Tipo de Atividade" value={atividade} onChange={setAtiv} options={atividades} allowNew withColor onAddNew={(v,c)=>onSaveAtividade(v,c)} onRemove={v=>onDeleteAtividade(v)}/>
@@ -253,78 +271,141 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
             </div>}
           </Sec>
 
-          {/* NOTAS FISCAIS com status */}
+          {/* NOTAS FISCAIS */}
           <Sec title="📄 Notas Fiscais" defaultOpen={false}>
             {nfs.map((n,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
                 <button onClick={()=>setNfs(nfs.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
                 <Inp label="Nome do Material" value={n.nome} onChange={v=>setNfs(nfs.map((x,j)=>j===i?{...x,nome:v}:x))}/>
-                {/* STATUS do documento */}
                 <StatusDocSel value={n.status} onChange={v=>setNfs(nfs.map((x,j)=>j===i?{...x,status:v}:x))}/>
                 {n.nomeArq
-                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>
+                  ?<div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
                     {n.arquivo_url
-                      ?<a href={n.arquivo_url} target="_blank" rel="noreferrer" style={{color:GOLD}}>📎 {n.nomeArq}</a>
-                      :<span>📎 {n.nomeArq}</span>
+                      ?<a href={n.arquivo_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:GOLD}}>📎 {n.nomeArq}</a>
+                      :<span style={{fontSize:12,color:'#888'}}>📎 {n.nomeArq}</span>
                     }
                     {docStatusBadge(n.status)}
+                    {/* Botão excluir documento */}
+                    <button onClick={()=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:'',nomeArq:'',arquivo_url:''}:x))}
+                      style={{marginLeft:'auto',background:'#C0392B',border:'none',color:WHITE,borderRadius:4,padding:'2px 8px',fontSize:10,cursor:'pointer'}}>
+                      🗑 Remover
+                    </button>
                   </div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar PDF<input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)));}} /></label>
+                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer',display:'block',marginTop:4}}>
+                    📁 Adicionar PDF
+                    <input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{
+                      const f=e.target.files[0]
+                      if(!f) return
+                      // Aceita PDF e imagens
+                      readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)))
+                    }}/>
+                  </label>
                 }
               </div>
             ))}
             <Btn small outline onClick={()=>setNfs([...nfs,{nome:'',status:'pendente'}])}>+ Adicionar NF</Btn>
           </Sec>
 
-          {/* CATÁLOGO TÉCNICO com status */}
+          {/* CATÁLOGO TÉCNICO */}
           <Sec title="📚 Catálogo Técnico" defaultOpen={false}>
             {cats.map((c,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
                 <button onClick={()=>setCats(cats.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
                 <Inp label="Nome do Material" value={c.nome} onChange={v=>setCats(cats.map((x,j)=>j===i?{...x,nome:v}:x))}/>
-                {/* STATUS do catálogo */}
                 <StatusDocSel value={c.status} onChange={v=>setCats(cats.map((x,j)=>j===i?{...x,status:v}:x))}/>
                 {c.nomeArq
-                  ?<div style={{fontSize:12,color:GOLD,display:'flex',alignItems:'center',gap:8}}>
+                  ?<div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
                     {c.arquivo_url
-                      ?<a href={c.arquivo_url} target="_blank" rel="noreferrer" style={{color:GOLD}}>📎 {c.nomeArq}</a>
-                      :<span>📎 {c.nomeArq}</span>
+                      ?<a href={c.arquivo_url} target="_blank" rel="noreferrer" style={{fontSize:12,color:GOLD}}>📎 {c.nomeArq}</a>
+                      :<span style={{fontSize:12,color:'#888'}}>📎 {c.nomeArq}</span>
                     }
                     {docStatusBadge(c.status)}
+                    <button onClick={()=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:'',nomeArq:'',arquivo_url:''}:x))}
+                      style={{marginLeft:'auto',background:'#C0392B',border:'none',color:WHITE,borderRadius:4,padding:'2px 8px',fontSize:10,cursor:'pointer'}}>
+                      🗑 Remover
+                    </button>
                   </div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer'}}>📁 Adicionar Arquivo<input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)));}} /></label>
+                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer',display:'block',marginTop:4}}>
+                    📁 Adicionar Arquivo
+                    <input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{
+                      const f=e.target.files[0]
+                      if(!f) return
+                      readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)))
+                    }}/>
+                  </label>
                 }
               </div>
             ))}
             <Btn small outline onClick={()=>setCats([...cats,{nome:'',status:'pendente'}])}>+ Adicionar Catálogo</Btn>
           </Sec>
 
-          {/* COMENTÁRIOS com status e badge correto (só pendentes) */}
+          {/* COMENTÁRIOS com botão Comentar + edição */}
           <Sec title="💬 Comentários" defaultOpen={false}>
             {coments.map((c,i)=>(
               <div key={i} style={{background:OFF,borderRadius:8,padding:10,marginBottom:8,border:`1px solid ${BEIGE}`,position:'relative'}}>
-                <button onClick={()=>setComents(coments.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
-                <Inp label="Data" type="date" value={c.data} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,data:v}:x))}/>
-                <Inp label="Usuário que adicionou" value={c.usuario} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,usuario:v}:x))}/>
-                <Inp label="Responsável pela ação" value={c.responsavel} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,responsavel:v}:x))}/>
-                <div style={{marginBottom:8}}>
-                  <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4,letterSpacing:.5,textTransform:'uppercase'}}>Status</label>
-                  <div style={{display:'flex',gap:6}}>
-                    {STATUS_COMENT.map(s=>(
-                      <button key={s.value} onClick={()=>setComents(coments.map((x,j)=>j===i?{...x,status:s.value}:x))}
-                        style={{flex:1,padding:'5px 0',borderRadius:6,border:`1.5px solid ${s.color}`,background:c.status===s.value?s.color:'transparent',color:c.status===s.value?WHITE:s.color,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all .15s'}}>
-                        {s.label}
-                      </button>
-                    ))}
+                {editingComent===i ? (
+                  /* Modo edição */
+                  <div>
+                    <button onClick={()=>setComents(coments.filter((_,j)=>j!==i))} style={{position:'absolute',top:6,right:6,background:'#C0392B',border:'none',color:WHITE,borderRadius:4,width:18,height:18,cursor:'pointer',fontSize:11}}>✕</button>
+                    <Inp label="Data" type="date" value={c.data} onChange={v=>setComents(coments.map((x,j)=>j===i?{...x,data:v}:x))}/>
+                    {/* Usuário por dropdown */}
+                    <div style={{marginBottom:10}}>
+                      <label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>Usuário que adicionou</label>
+                      <select value={c.usuario||''} onChange={e=>setComents(coments.map((x,j)=>j===i?{...x,usuario:e.target.value}:x))}
+                        style={{width:'100%',border:'1px solid #D4C9B0',borderRadius:6,padding:'7px 10px',fontSize:13,background:WHITE}}>
+                        <option value=''>— selecione —</option>
+                        {usuarios.map(u=><option key={u.id||u.nome} value={u.nome}>{u.nome}</option>)}
+                      </select>
+                    </div>
+                    {/* Responsável por dropdown */}
+                    <div style={{marginBottom:10}}>
+                      <label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>Responsável pela ação</label>
+                      <select value={c.responsavel||''} onChange={e=>setComents(coments.map((x,j)=>j===i?{...x,responsavel:e.target.value}:x))}
+                        style={{width:'100%',border:'1px solid #D4C9B0',borderRadius:6,padding:'7px 10px',fontSize:13,background:WHITE}}>
+                        <option value=''>— selecione —</option>
+                        {usuarios.map(u=><option key={u.id||u.nome} value={u.nome}>{u.nome}</option>)}
+                      </select>
+                    </div>
+                    <div style={{marginBottom:8}}>
+                      <label style={{fontSize:11,color:'#888',display:'block',marginBottom:4,letterSpacing:.5,textTransform:'uppercase'}}>Status</label>
+                      <div style={{display:'flex',gap:6}}>
+                        {STATUS_COMENT.map(s=>(
+                          <button key={s.value} onClick={()=>setComents(coments.map((x,j)=>j===i?{...x,status:s.value}:x))}
+                            style={{flex:1,padding:'5px 0',borderRadius:6,border:`1.5px solid ${s.color}`,background:c.status===s.value?s.color:'transparent',color:c.status===s.value?WHITE:s.color,fontSize:11,fontWeight:600,cursor:'pointer',transition:'all .15s'}}>
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{marginBottom:6}}>
+                      <label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>Descrição</label>
+                      <textarea value={c.descricao||''} rows={3} onChange={e=>setComents(coments.map((x,j)=>j===i?{...x,descricao:e.target.value}:x))} style={{width:'100%',boxSizing:'border-box',border:`1px solid ${BEIGE}`,borderRadius:6,padding:'7px 10px',fontSize:13,resize:'vertical'}}/>
+                    </div>
+                    {/* Botão Comentar */}
+                    <button onClick={()=>setEditingComent(null)}
+                      style={{background:GOLD,border:'none',color:WHITE,borderRadius:6,padding:'7px 18px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                      💬 Comentar
+                    </button>
                   </div>
-                </div>
-                <div style={{marginBottom:6}}>
-                  <label style={{fontSize:11,color:'#888',display:'block',marginBottom:3,letterSpacing:.5,textTransform:'uppercase'}}>Descrição</label>
-                  <textarea value={c.descricao||''} rows={3} onChange={e=>setComents(coments.map((x,j)=>j===i?{...x,descricao:e.target.value}:x))} style={{width:'100%',boxSizing:'border-box',border:`1px solid ${BEIGE}`,borderRadius:6,padding:'7px 10px',fontSize:13,resize:'vertical'}}/>
-                </div>
+                ) : (
+                  /* Modo visualização — fixado */
+                  <div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                      {c.status&&<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:10,background:STATUS_COMENT.find(s=>s.value===c.status)?.color+'22',color:STATUS_COMENT.find(s=>s.value===c.status)?.color,border:`1px solid ${STATUS_COMENT.find(s=>s.value===c.status)?.color}44`}}>{STATUS_COMENT.find(s=>s.value===c.status)?.label}</span>}
+                      {c.usuario&&<span style={{fontSize:12,color:'#666',fontWeight:600}}>👤 {c.usuario}</span>}
+                      <span style={{fontSize:11,color:'#AAA',marginLeft:'auto'}}>{c.data}</span>
+                      {/* Botão editar */}
+                      <button onClick={()=>setEditingComent(i)} style={{background:'none',border:`1px solid ${BEIGE}`,borderRadius:4,padding:'2px 8px',fontSize:11,cursor:'pointer',color:GOLD}}>✏️</button>
+                      {/* Botão excluir */}
+                      <button onClick={()=>setComents(coments.filter((_,j)=>j!==i))} style={{background:'none',border:'1px solid #C0392B',borderRadius:4,padding:'2px 8px',fontSize:11,cursor:'pointer',color:'#C0392B'}}>✕</button>
+                    </div>
+                    {c.responsavel&&<div style={{fontSize:11,color:'#888',marginBottom:3}}>Responsável: {c.responsavel}</div>}
+                    <div style={{fontSize:13,color:JET,lineHeight:1.5}}>{c.descricao}</div>
+                  </div>
+                )}
               </div>
             ))}
-            <Btn small outline onClick={()=>setComents([...coments,{data:new Date().toISOString().slice(0,10),usuario:'',responsavel:'',descricao:'',status:'a_iniciar'}])}>+ Adicionar Comentário</Btn>
+            <Btn small outline onClick={addComent}>+ Adicionar Comentário</Btn>
           </Sec>
 
           <Sec title="🔗 Link do Drive" defaultOpen={false}>
@@ -344,7 +425,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   )
 }
 
-export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId}){
+export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId,usuarios}){
   const canvasRef=useRef()
   const fileRef=useRef()
   const[addPav,setAddPav]=useState(false)
@@ -356,7 +437,6 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   const[saving,setSaving]=useState(false)
   const dragStart=useRef(null)
 
-  // plantas é agora { pavimento: { data, nome, updated_at } }
   const plantaObj=plantas[pavAtivo]
   const planta=plantaObj?.data||null
   const plantaNome=plantaObj?.nome||null
@@ -378,17 +458,15 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
     const f=e.target.files[0];if(!f) return
     const r=new FileReader()
     r.onload=ev=>{
-      // Atualiza state local imediatamente para preview
       setPlantas(prev=>({...prev,[pavAtivo]:{data:ev.target.result,nome:f.name,updated_at:new Date().toISOString()}}))
     }
     r.readAsDataURL(f)
   }
 
-  // Salva planta no Supabase
   const handleSavePlanta=async()=>{
     if(!planta){alert('Nenhuma planta carregada.');return}
     setSaving(true)
-    await onSavePlanta(pavAtivo, planta, plantaNome||pavAtivo)
+    await onSavePlanta(pavAtivo,planta,plantaNome||pavAtivo)
     setSaving(false)
     alert(`Planta "${plantaNome||pavAtivo}" salva com sucesso!`)
   }
@@ -456,7 +534,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
           <div>
             <span style={{fontSize:12,fontWeight:700,color:GOLD}}>{pavAtivo}</span>
             {plantaNome&&<span style={{marginLeft:10,fontSize:10,color:'#999',fontStyle:'italic'}}>📄 {plantaNome}</span>}
-            {plantaUpdatedAt&&<span style={{marginLeft:8,fontSize:9,color:'#bbb'}}>· atualizada em {fmtDate(plantaUpdatedAt)}</span>}
+            {plantaUpdatedAt&&<span style={{marginLeft:8,fontSize:9,color:'#bbb'}}>· {fmtDate(plantaUpdatedAt)}</span>}
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {planta&&<>
@@ -465,8 +543,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
               <button onClick={()=>setZoom(z=>Math.min(5,z+.25))} style={{background:JET2,color:WHITE,border:'none',borderRadius:5,width:26,height:26,cursor:'pointer',fontSize:16}}>+</button>
               <button onClick={()=>{setZoom(1);setPan({x:0,y:0});}} style={{background:'transparent',border:`1px solid ${BEIGE}`,borderRadius:5,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'#888'}}>Reset</button>
             </>}
-            <input ref={fileRef} type="file" accept="image/*,.pdf" style={{display:'none'}} onChange={handleUpload}/>
-            {/* Salvar persiste no Supabase */}
+            <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleUpload}/>
             {planta&&(
               <button onClick={handleSavePlanta} disabled={saving}
                 style={{background:saving?'#888':GOLD,border:`1.5px solid ${saving?'#888':GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:saving?'not-allowed':'pointer'}}>
@@ -486,24 +563,22 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
           onMouseUp={()=>setDragging(false)}
           onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         >
-          {!planta && regsAtivos.length===0 ?(
+          {!planta&&regsAtivos.length===0?(
             <div onClick={()=>fileRef.current.click()} style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#BBB',gap:10}}>
               <div style={{fontSize:44}}>🗺️</div>
               <div style={{fontSize:14}}>Adicionar planta para <b>{pavAtivo}</b></div>
             </div>
           ):(
             <div style={{position:'relative',minHeight:440}} onClick={handleImgClick}>
-              {/* Imagem da planta (se carregada) */}
               {planta
-                ? <div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}}>
-                    <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
-                  </div>
-                : <div style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#CCC',gap:8,pointerEvents:'none'}}>
-                    <div style={{fontSize:32}}>🗺️</div>
-                    <div style={{fontSize:12}}>{plantaObj?.loading?'Carregando planta...':'Clique para adicionar planta'}</div>
-                  </div>
+                ?<div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}}>
+                  <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
+                </div>
+                :<div style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#CCC',gap:8,pointerEvents:'none'}}>
+                  <div style={{fontSize:32}}>🗺️</div>
+                  <div style={{fontSize:12}}>{plantaObj?.loading?'Carregando planta...':'Clique para adicionar planta'}</div>
+                </div>
               }
-              {/* Ícones dos registros — sempre visíveis independente da planta */}
               {regsAtivos.map(reg=>(
                 <CameraIcon key={reg.id} reg={reg}
                   onClick={e=>{e.stopPropagation();setIconClicked(reg.id);}}
@@ -526,8 +601,8 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
-      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
+      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
     </div>
   )
 }
