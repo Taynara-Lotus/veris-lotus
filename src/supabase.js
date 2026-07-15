@@ -36,6 +36,22 @@ export const getEmpreendimentos = async () => {
 }
 export const saveEmpreendimento = async (emp) => {
   const { id, ...rest } = emp
+  
+  // Se foto é base64, faz upload para Storage primeiro
+  if (rest.foto && rest.foto.startsWith('data:')) {
+    try {
+      const res = await fetch(rest.foto)
+      const blob = await res.blob()
+      const ext = blob.type.includes('png') ? 'png' : 'jpg'
+      const path = `capas/${id||Date.now()}_capa.${ext}`
+      const { error } = await supabase.storage.from('arquivos-veris').upload(path, blob, { upsert: true })
+      if (!error) {
+        const { data: urlData } = supabase.storage.from('arquivos-veris').getPublicUrl(path)
+        rest.foto = urlData?.publicUrl || rest.foto
+      }
+    } catch(e) { console.error('foto upload error:', e) }
+  }
+  
   if (id) {
     const { data } = await supabase.from('empreendimentos').update(rest).eq('id', id).select().single()
     return data
@@ -127,17 +143,18 @@ export const saveRegistro = async (registro) => {
 
   if (!savedData) return null
 
-  // Salva fotos no Storage (fire and forget se der erro)
+  // Salva fotos em paralelo no Storage
   if (fotos !== undefined) {
     await supabase.from('fotos').delete().eq('registro_id', savedData.id)
-    for (const f of (fotos||[])) {
+    const fotosComUrl = await Promise.all((fotos||[]).map(async f => {
       let url = f.url || ''
       if (!url && f.data?.startsWith('data:')) {
         const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${sanitizePath(f.nome||'foto')}`
         url = await uploadToStorage(f.data, f.nome, path) || ''
       }
-      await supabase.from('fotos').insert({ registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url })
-    }
+      return { registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url }
+    }))
+    if (fotosComUrl.length > 0) await supabase.from('fotos').insert(fotosComUrl)
   }
 
   // Salva arquivos NFs e Cats no Storage
@@ -147,18 +164,18 @@ export const saveRegistro = async (registro) => {
       ...(nfs||[]).map(n => ({ ...n, tipo: 'nf' })),
       ...(cats||[]).map(c => ({ ...c, tipo: 'cat' }))
     ]
-    for (const arq of allArqs) {
+    // Upload de todos os arquivos em paralelo
+    const arqsComUrl = await Promise.all(allArqs.map(async arq => {
       let arquivo_url = arq.arquivo_url || ''
       if (!arquivo_url && arq.arquivo?.startsWith('data:')) {
         const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${sanitizePath(arq.nomeArq||'arquivo')}`
         arquivo_url = await uploadToStorage(arq.arquivo, arq.nomeArq, path) || ''
       }
-      const { error } = await supabase.from('arquivos').insert({
-        registro_id: savedData.id, empreendimento_id: empId,
-        tipo: arq.tipo, nome: arq.nome||'', nome_arq: arq.nomeArq||'',
-        status: arq.status||'pendente', arquivo_url
-      })
-      if (error) console.error('saveArquivo error:', error.message)
+      return { registro_id: savedData.id, empreendimento_id: empId, tipo: arq.tipo, nome: arq.nome||'', nome_arq: arq.nomeArq||'', status: arq.status||'pendente', arquivo_url }
+    }))
+    if (arqsComUrl.length > 0) {
+      const { error } = await supabase.from('arquivos').insert(arqsComUrl)
+      if (error) console.error('saveArquivos error:', error.message)
     }
   }
 
