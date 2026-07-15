@@ -57,47 +57,82 @@ function DocStatusSummary({items, label}){
   )
 }
 
-// ── Exportar PDF via print ────────────────────────────────────────
+// ── Exportar PDF completo com fotos e todos os dados ─────────────
 function exportPDF(registros, atividades) {
   const getColor = atv => atividades.find(a=>(a.name||a)===atv)?.color||GOLD
-  const rows = registros.map(r => `
-    <tr style="border-bottom:1px solid #eee">
-      <td style="padding:8px 10px;font-weight:700;color:${GOLD}">${r.serial||'—'}</td>
-      <td style="padding:8px 10px">${r.atividade||'—'}</td>
-      <td style="padding:8px 10px">${r.pavimento||'—'}</td>
-      <td style="padding:8px 10px">${r.junta||'—'}</td>
-      <td style="padding:8px 10px">${r.responsavel||'—'}</td>
-      <td style="padding:8px 10px">${r.horario||'—'}</td>
-      <td style="padding:8px 10px">${r.nfs?.length||0} NF(s)</td>
-      <td style="padding:8px 10px">${r.cats?.length||0} Cat.</td>
-      <td style="padding:8px 10px">${r.coments?.filter(c=>c.status==='pendente').length||0} pend.</td>
-    </tr>
-  `).join('')
+  
+  const STATUS_COLORS = { concluido:'#2E7D32', pendente:'#C62828', a_iniciar:'#E65100' }
+  const STATUS_LABELS = { concluido:'Concluído', pendente:'Pendente', a_iniciar:'A iniciar' }
+  const DOC_STATUS_LABELS = { pendente:'Pendente', validar:'Validar', validado:'Validado', nao_se_aplica:'Não se aplica' }
+
+  const cards = registros.map(r => {
+    const pendentes = r.coments?.filter(c=>c.status==='pendente').length||0
+    const cor = getColor(r.atividade)
+    
+    const fotosHtml = r.fotos?.length > 0 ? `
+      <div style="margin:8px 0">
+        <div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Fotos (${r.fotos.length})</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${r.fotos.map(f=>`<img src="${f.url||f.data||''}" style="width:120px;height:90px;object-fit:cover;border-radius:4px;border:1px solid #ddd"/>`).join('')}
+        </div>
+      </div>` : ''
+
+    const nfsHtml = r.nfs?.length > 0 ? `
+      <div style="margin:8px 0">
+        <div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Notas Fiscais (${r.nfs.length})</div>
+        ${r.nfs.map(n=>`<div style="font-size:11px;margin:2px 0">📎 ${n.nomeArq||n.nome||'—'} <span style="font-size:10px;color:#888">${DOC_STATUS_LABELS[n.status]||''}</span></div>`).join('')}
+      </div>` : ''
+
+    const catsHtml = r.cats?.length > 0 ? `
+      <div style="margin:8px 0">
+        <div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Catálogos Técnicos (${r.cats.length})</div>
+        ${r.cats.map(c=>`<div style="font-size:11px;margin:2px 0">📎 ${c.nomeArq||c.nome||'—'} <span style="font-size:10px;color:#888">${DOC_STATUS_LABELS[c.status]||''}</span></div>`).join('')}
+      </div>` : ''
+
+    const comentsHtml = r.coments?.length > 0 ? `
+      <div style="margin:8px 0">
+        <div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Comentários (${r.coments.length})</div>
+        ${r.coments.map(c=>`
+          <div style="border-left:3px solid ${STATUS_COLORS[c.status]||'#ccc'};padding:4px 8px;margin:4px 0;background:#fafafa;font-size:11px">
+            <span style="color:${STATUS_COLORS[c.status]};font-weight:700">${STATUS_LABELS[c.status]||''}</span>
+            ${c.usuario?`<span style="color:#666;margin-left:8px">👤 ${c.usuario}</span>`:''}
+            <span style="color:#aaa;margin-left:8px">${c.data||''}</span>
+            ${c.descricao?`<div style="color:#333;margin-top:3px">${c.descricao}</div>`:''}
+          </div>`).join('')}
+      </div>` : ''
+
+    return `
+    <div style="border:1px solid #e0d8c8;border-radius:8px;padding:16px;margin-bottom:20px;page-break-inside:avoid">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;border-bottom:1px solid #f0e8d8;padding-bottom:10px">
+        <div style="width:28px;height:28px;border-radius:50%;background:${cor};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">📷</div>
+        <div style="font-weight:700;color:#68541F;font-size:15px">${r.serial||'—'}</div>
+        <div style="font-size:13px;color:#1A1A18;font-weight:500">${r.atividade||'—'}</div>
+        ${pendentes>0?`<span style="background:#C62828;color:white;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">⚠ ${pendentes} pendente${pendentes>1?'s':''}</span>`:''}
+        <div style="margin-left:auto;font-size:11px;color:#aaa">${r.horario||''}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;font-size:12px">
+        ${[['Pavimento',r.pavimento],['Junta',r.junta],['Responsável',r.responsavel],['Atividade',r.atividade]].map(([k,v])=>v?`<div><span style="color:#aaa;font-size:10px;text-transform:uppercase;letter-spacing:.5px">${k}</span><br><span style="color:#1A1A18">${v}</span></div>`:'').join('')}
+        ${r.geo_lat?`<div><span style="color:#aaa;font-size:10px;text-transform:uppercase">WGS84</span><br><span>${r.geo_lat}, ${r.geo_lng}</span></div>`:''}
+        ${r.utm_zone?`<div><span style="color:#aaa;font-size:10px;text-transform:uppercase">UTM</span><br><span>Zona ${r.utm_zone} E${r.utm_e}/N${r.utm_n}</span></div>`:''}
+      </div>
+      ${fotosHtml}${nfsHtml}${catsHtml}${comentsHtml}
+    </div>`
+  }).join('')
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<title>Relatório VĒRIS — Gestão de Registros</title>
+<title>Relatório VĒRIS</title>
 <style>
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1A1A18; padding: 32px; }
-  h1 { font-size: 22px; font-weight: 300; letter-spacing: 2px; color: #68541F; margin-bottom: 4px; }
-  .sub { font-size: 11px; color: #aaa; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 24px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  thead { background: #1A1A18; color: #F7F5F0; }
-  thead th { padding: 10px; text-align: left; font-weight: 500; letter-spacing: .5px; font-size: 10px; text-transform: uppercase; }
-  tbody tr:nth-child(even) { background: #F7F5F0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1A1A18; padding: 32px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 300; letter-spacing: 2px; color: #68541F; margin-bottom: 4px; }
+  .sub { font-size: 11px; color: #aaa; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 28px; }
   .footer { margin-top: 32px; font-size: 10px; color: #aaa; border-top: 1px solid #eee; padding-top: 12px; }
   @media print { body { padding: 16px; } }
 </style>
 </head><body>
-<h1>VĒRIS · Gestão de Registros</h1>
+<h1>VĒRIS · Relatório de Registros</h1>
 <div class="sub">Gerado em ${new Date().toLocaleString('pt-BR')} · ${registros.length} registro(s)</div>
-<table>
-  <thead><tr>
-    <th>Nº Série</th><th>Atividade</th><th>Pavimento</th><th>Junta</th>
-    <th>Responsável</th><th>Data/Hora</th><th>NFs</th><th>Catálogos</th><th>Pendentes</th>
-  </tr></thead>
-  <tbody>${rows}</tbody>
-</table>
+${cards}
 <div class="footer">VĒRIS by Lotus · Plataforma de Certificação · Relatório gerado automaticamente</div>
 </body></html>`
 
@@ -105,7 +140,7 @@ function exportPDF(registros, atividades) {
   w.document.write(html)
   w.document.close()
   w.focus()
-  setTimeout(() => { w.print() }, 400)
+  setTimeout(() => { w.print() }, 800)
 }
 
 // ── Exportar Excel (CSV compatível com Excel) ─────────────────────
