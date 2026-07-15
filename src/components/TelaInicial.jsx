@@ -173,9 +173,12 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
 
   useEffect(() => {
     if (!authed) return
+    // Empreendimentos já foram carregados no login — só busca usuários
     ;(async () => {
-      setLoading(true)
-      const [empsData, usersData] = await Promise.all([getEmpreendimentos(), getUsuarios()])
+      const [empsData, usersData] = await Promise.all([
+        emps.length > 0 ? Promise.resolve(emps) : getEmpreendimentos(),
+        getUsuarios()
+      ])
       setEmps(empsData)
       setUsuarios(usersData)
       setProfileForm(currentUser || {})
@@ -185,9 +188,20 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
 
   const handleLogin = async () => {
     if (!email || !senha) { setLoginErr('Preencha e-mail e senha.'); return }
-    const u = await loginUsuario(email.trim().toLowerCase(), senha)
-    if (u) { setLoginErr(''); onLogin(u); setProfileForm(u); }
-    else setLoginErr('E-mail ou senha incorretos.')
+    // Login e carregamento de empreendimentos em paralelo
+    const [u, empsData] = await Promise.all([
+      loginUsuario(email.trim().toLowerCase(), senha),
+      getEmpreendimentos()
+    ])
+    if (u) {
+      setLoginErr('')
+      setEmps(empsData)
+      setLoading(false)
+      onLogin(u)
+      setProfileForm(u)
+    } else {
+      setLoginErr('E-mail ou senha incorretos.')
+    }
   }
 
   const handleForgot = () => {
