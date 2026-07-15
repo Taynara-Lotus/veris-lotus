@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  getObra, saveObra, getRegistros, getAtividades, mapAtividades, getJuntas,
+  getObra, saveObra, getRegistros, getAtividades, mapAtividades, getJuntas, getUsuarios,
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
   saveJunta, deleteJunta, getPlantasMeta, getPlantaImagem,
   savePlanta, deletePlanta, getSerialCounter, setSerialCounter,
@@ -67,6 +67,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [logs, setLogs] = useState([])
+  const [usuarios, setUsuarios] = useState([])
   const [logsLoaded, setLogsLoaded] = useState(false)
 
   const empId = obraAberta?.id
@@ -83,6 +84,7 @@ export default function App() {
       setJuntas([])
       setLogs([])
       setLogsLoaded(false)
+      setUsuarios([])
       setTab(0) // sempre abre em Dados da Obra
 
       try {
@@ -105,6 +107,7 @@ export default function App() {
 
         // Serial — usa registros locais, evita chamada extra ao banco
         await initSerial(empId, regsData)
+        getUsuarios().then(u => setUsuarios(u))
 
       } catch(e) { console.error(e) }
       setLoading(false)
@@ -209,7 +212,7 @@ export default function App() {
     resetSerialForEmp(empId, () => logAction('Nº de série reiniciado'))
   }
 
-  const TABS = ['Dados da Obra', 'Registros para Certificação', 'Gestão de Registros', 'Vista 3D', 'Memória de Comandos']
+  const TABS = ['Dados da Obra', 'Registros', 'Gestão de Registros', 'Vista 3D', 'Memória de Comandos']
 
   if (!authed || !obraAberta) {
     return (
@@ -268,7 +271,7 @@ export default function App() {
             onSaveRegistro={handleSaveRegistro} onDeleteRegistro={handleDeleteRegistro}
             onSaveAtividade={handleSaveAtividade} onDeleteAtividade={handleDeleteAtividade}
             onSaveJunta={handleSaveJunta} onDeleteJunta={handleDeleteJunta}
-            empId={empId}
+            empId={empId} usuarios={usuarios}
           />
         )}
         {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial}/>}
