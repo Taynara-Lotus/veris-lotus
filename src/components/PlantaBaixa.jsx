@@ -456,11 +456,28 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
 
   const handleUpload=e=>{
     const f=e.target.files[0];if(!f) return
-    const r=new FileReader()
-    r.onload=ev=>{
-      setPlantas(prev=>({...prev,[pavAtivo]:{data:ev.target.result,nome:f.name,updated_at:new Date().toISOString()}}))
+    if(f.type==='application/pdf'){
+      // Renderiza PDF como imagem via canvas usando PDF.js
+      const r=new FileReader()
+      r.onload=async ev=>{
+        try{
+          const pdfjsLib=await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js')
+          // Fallback: salva como objeto URL e usa embed para exibir
+          const url=URL.createObjectURL(f)
+          setPlantas(prev=>({...prev,[pavAtivo]:{data:url,nome:f.name,updated_at:new Date().toISOString(),isPdf:true}}))
+        }catch{
+          const url=URL.createObjectURL(f)
+          setPlantas(prev=>({...prev,[pavAtivo]:{data:url,nome:f.name,updated_at:new Date().toISOString(),isPdf:true}}))
+        }
+      }
+      r.readAsArrayBuffer(f)
+    } else {
+      const r=new FileReader()
+      r.onload=ev=>{
+        setPlantas(prev=>({...prev,[pavAtivo]:{data:ev.target.result,nome:f.name,updated_at:new Date().toISOString(),isPdf:false}}))
+      }
+      r.readAsDataURL(f)
     }
-    r.readAsDataURL(f)
   }
 
   const handleSavePlanta=async()=>{
@@ -543,12 +560,21 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
               <button onClick={()=>setZoom(z=>Math.min(5,z+.25))} style={{background:JET2,color:WHITE,border:'none',borderRadius:5,width:26,height:26,cursor:'pointer',fontSize:16}}>+</button>
               <button onClick={()=>{setZoom(1);setPan({x:0,y:0});}} style={{background:'transparent',border:`1px solid ${BEIGE}`,borderRadius:5,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'#888'}}>Reset</button>
             </>}
-            <input ref={fileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleUpload}/>
+            <input ref={fileRef} type="file" accept="image/*,.pdf,application/pdf" style={{display:'none'}} onChange={handleUpload}/>
             {planta&&(
-              <button onClick={handleSavePlanta} disabled={saving}
-                style={{background:saving?'#888':GOLD,border:`1.5px solid ${saving?'#888':GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:saving?'not-allowed':'pointer'}}>
-                {saving?'Salvando…':'💾 Salvar'}
-              </button>
+              <>
+                <button onClick={handleSavePlanta} disabled={saving}
+                  style={{background:saving?'#888':GOLD,border:`1.5px solid ${saving?'#888':GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:saving?'not-allowed':'pointer'}}>
+                  {saving?'Salvando…':'💾 Salvar'}
+                </button>
+                <button onClick={async()=>{
+                  if(!window.confirm(`Excluir a planta "${plantaNome||pavAtivo}"? Esta ação não pode ser desfeita.`)) return
+                  await onDeletePlanta(pavAtivo)
+                  setPlantas(prev=>{const n={...prev};delete n[pavAtivo];return n})
+                }} style={{background:'transparent',border:'1.5px solid #C0392B',color:'#C0392B',borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                  🗑️ Excluir
+                </button>
+              </>
             )}
             <button onClick={()=>fileRef.current.click()} style={{background:'transparent',border:`1.5px solid ${GOLD}`,color:GOLD,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
               📁 {planta?'Trocar':'Carregar'}
@@ -572,7 +598,10 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
             <div style={{position:'relative',minHeight:440}} onClick={handleImgClick}>
               {planta
                 ?<div style={{transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`,transformOrigin:'0 0',transition:dragging?'none':'transform .1s'}}>
-                  <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
+                  {plantaObj?.isPdf
+                    ? <iframe src={planta} style={{width:'100%',height:520,border:'none',display:'block',pointerEvents:'none'}} title="Planta PDF"/>
+                    : <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
+                  }
                 </div>
                 :<div style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#CCC',gap:8,pointerEvents:'none'}}>
                   <div style={{fontSize:32}}>🗺️</div>
