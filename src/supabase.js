@@ -63,6 +63,9 @@ export const saveObra = async (obra) => {
 }
 
 // ── Registros ─────────────────────────────────────────────────────
+// Cache local para evitar re-fetch desnecessário
+const _cache = { registros: {}, fotos: {}, arquivos: {} }
+
 export const getRegistros = async (empId) => {
   const { data } = await supabase.from('registros')
     .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,x,y,empreendimento_id,created_at,updated_at')
@@ -70,7 +73,7 @@ export const getRegistros = async (empId) => {
     .order('created_at', { ascending: false })
   if (!data) return []
 
-  // Carrega fotos e arquivos em paralelo
+  // Carrega fotos e arquivos em paralelo (uma query cada)
   const [fotosRes, arquivosRes] = await Promise.all([
     supabase.from('fotos').select('registro_id,nome,url').eq('empreendimento_id', empId),
     supabase.from('arquivos').select('registro_id,tipo,nome,nome_arq,status,arquivo_url').eq('empreendimento_id', empId)
@@ -92,13 +95,19 @@ export const getRegistros = async (empId) => {
     }
   })
 
-  return data.map(r => ({
+  const result = data.map(r => ({
     ...r,
     fotos: fotosMap[r.id] || [],
     nfs: nfsMap[r.id] || [],
     cats: catsMap[r.id] || []
   }))
+  _cache.registros[empId] = result
+  return result
 }
+
+// Busca registros do cache se disponível
+export const getRegistrosCached = (empId) => _cache.registros[empId] || null
+export const invalidateCache = (empId) => { delete _cache.registros[empId] }
 
 export const saveRegistro = async (registro) => {
   const { id, fotos, nfs, cats, ...rest } = registro
