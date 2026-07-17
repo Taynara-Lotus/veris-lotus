@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { nextSerial } from '../App'
 
 const GOLD='#68541F',GOLD2='#8B6F2E',BEIGE='#CDC9B8',BEIGE2='#EDE8DF'
@@ -135,62 +135,79 @@ function UserSel({label,value,onChange,usuarios}){
 }
 
 function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
-  // Handoff 4A: corte esquemático com larguras em pirâmide
-  // Cobertura=52%, subindo para 100% nos subsolo, térreo ativo em dourado
+  // Desenho original: SVG com retângulos escalonados
+  // Subsolo: largura máxima (mais largos)
+  // Térreo até último pavimento: médios
+  // Cobertura: mais estreito
   const ordered = [...pavimentos].reverse()
-  const total = ordered.length
+  const svgW = isMobile ? 104 : 130
+  const maxW = svgW - 4
 
-  // Calcula width% baseado na posição (cobertura estreita, subsolo largo)
-  const getWidth = (pav, i) => {
-    if (/cobertura/i.test(pav)) return 52
-    if (/4º subsolo/i.test(pav)) return 100
-    if (/3º subsolo/i.test(pav)) return 97
-    if (/2º subsolo/i.test(pav)) return 94
-    if (/1º subsolo/i.test(pav)) return 91
-    if (/subsolo/i.test(pav)) return 88
-    // Pavimentos: escalonar de ~62% (cobertura) para ~88% (térreo)
-    const ratio = i / Math.max(total - 1, 1)
-    return Math.round(62 + ratio * 26)
+  const getW = (pav) => {
+    if (/cobertura/i.test(pav)) return maxW * 0.52
+    if (/4º subsolo/i.test(pav)) return maxW
+    if (/3º subsolo/i.test(pav)) return maxW * 0.97
+    if (/2º subsolo/i.test(pav)) return maxW * 0.94
+    if (/1º subsolo/i.test(pav)) return maxW * 0.91
+    if (/subsolo/i.test(pav)) return maxW * 0.88
+    if (/mezanino/i.test(pav)) return maxW * 0.82
+    if (/térreo/i.test(pav)) return maxW * 0.85
+    // Pavimentos: escalonar entre 0.62 e 0.84
+    const total = ordered.filter(p => !/subsolo|cobertura|mezanino|térreo/i.test(p)).length
+    const idx = ordered.filter(p => !/subsolo|cobertura|mezanino|térreo/i.test(p)).indexOf(pav)
+    if (idx < 0) return maxW * 0.75
+    return maxW * (0.62 + (idx / Math.max(total-1,1)) * 0.22)
   }
 
-  const isTerr = (pav) => /térreo/i.test(pav)
-  const isSub = (pav) => /subsolo/i.test(pav)
-  const isCob = (pav) => /cobertura/i.test(pav)
+  const getH = (pav) => /cobertura/i.test(pav) ? 22 : /subsolo/i.test(pav) ? 17 : /mezanino/i.test(pav) ? 18 : 19
+
+  let yPos = 2
+  const rects = ordered.map(pav => {
+    const w = getW(pav), h = getH(pav), x = (svgW - w) / 2
+    const r = { pav, x, y: yPos, w, h }
+    yPos += h + 1
+    return r
+  })
+
+  const totalH = yPos + 2
+  const terreoRect = rects.find(r => /térreo/i.test(r.pav))
 
   return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:'100%',gap:1,padding:'0 0 4px'}}>
-      {ordered.map((pav, i) => {
+    <svg width={svgW} height={totalH} style={{display:'block',overflow:'visible'}}>
+      {rects.map(({pav, x, y, w, h}) => {
         const active = pav === pavAtivo
-        const w = getWidth(pav, i)
+        const isCob = /cobertura/i.test(pav)
+        const isSub = /subsolo/i.test(pav)
+        const isTerr = /térreo/i.test(pav)
         const hasReg = registros.some(r => r.pavimento === pav)
-        const bg = active ? '#B99A54' : isTerr(pav) ? '#2a2620' : isSub(pav) ? '#332e24' : '#211e17'
-        const color = active ? '#16140f' : '#8a8477'
+        const bg = active ? '#B99A54' : isCob ? '#444' : isSub ? '#332e24' : isTerr ? '#2a2620' : '#252118'
+        const border = active ? '#c9a832' : isCob ? '#555' : '#3a352c'
+        const color = active ? '#16140f' : isCob ? '#aaa' : '#8a8477'
         const shortName = pav
-          .replace('Pavimento Térreo', 'Térreo')
-          .replace('º Pavimento', 'º Pav.')
-          .replace('º Subsolo', 'º Sub.')
-          .replace('Mezanino', 'Mezanino')
+          .replace('Pavimento Térreo','Térreo')
+          .replace('º Pavimento','º Pav.')
+          .replace('º Subsolo','º Sub.')
         return (
-          <div key={pav} onClick={() => setPavAtivo(pav)}
-            style={{
-              width: w + '%', padding: active ? '7px 0' : '6px 0',
-              fontSize: 8, textAlign: 'center', background: bg, color,
-              fontWeight: active ? 700 : 400, cursor: 'pointer',
-              position: 'relative', letterSpacing: '.04em',
-              transition: 'background .12s', fontFamily: "Inter,sans-serif",
-              borderRadius: active ? 3 : 0
-            }}>
-            {shortName}
+          <g key={pav} onClick={() => setPavAtivo(pav)} style={{cursor:'pointer'}}>
+            <rect x={x} y={y} width={w} height={h-1}
+              fill={bg} stroke={border} strokeWidth={active?1.5:.5}
+              rx={isCob?3:1}/>
             {hasReg && !active && (
-              <span style={{
-                position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-                width: 4, height: 4, borderRadius: '50%', background: '#B99A54', display: 'inline-block'
-              }}/>
+              <circle cx={x+w-5} cy={y+h/2-.5} r={2.5} fill="#B99A54" opacity={.9}/>
             )}
-          </div>
+            <text x={svgW/2} y={y+h/2+3.5} textAnchor="middle"
+              fontSize={isCob?7:6.5} fontWeight={active?'700':'400'}
+              fill={color} fontFamily="Inter,sans-serif">
+              {shortName}
+            </text>
+          </g>
         )
       })}
-    </div>
+      {terreoRect && (
+        <line x1={0} y1={terreoRect.y+terreoRect.h} x2={svgW} y2={terreoRect.y+terreoRect.h}
+          stroke="#B99A54" strokeWidth={1} strokeDasharray="3,3" opacity={.4}/>
+      )}
+    </svg>
   )
 }
 
@@ -208,6 +225,7 @@ function CameraIcon({reg,onClick,style}){
 }
 
 function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta,onSaveAtividade,onDeleteAtividade,onClose,onSave,onDelete,registros,plantaNome,plantaUpdatedAt,empId,usuarios}){
+  const [miniSaving, setMiniSaving] = useState(false)
   const[fotos,setFotos]=useState(existing?.fotos||[])
   const horario=existing?.horario||nowStr()
   const[junta,setJunta]=useState(existing?.junta||'')
@@ -242,8 +260,10 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const removeFoto=i=>setFotos(fotos.filter((_,j)=>j!==i))
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
-  const handleSave=()=>{
-    onSave({fotos,horario,junta,pavimento,geo_lat:geo?.lat,geo_lng:geo?.lng,utm_zone:utmCoord?.zone,utm_e:utmCoord?.E,utm_n:utmCoord?.N,atividade,responsavel,nfs,cats,coments,drive,serial})
+  const handleSave=async()=>{
+    setMiniSaving(true)
+    await onSave({fotos,horario,junta,pavimento,geo_lat:geo?.lat,geo_lng:geo?.lng,utm_zone:utmCoord?.zone,utm_e:utmCoord?.E,utm_n:utmCoord?.N,atividade,responsavel,nfs,cats,coments,drive,serial})
+    setMiniSaving(false)
   }
 
   // Adicionar novo comentário vazio
@@ -452,7 +472,15 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
           <div style={{display:'flex',gap:10,marginTop:18,justifyContent:'flex-end'}}>
             {onDelete&&<Btn danger small onClick={()=>setConfirmDel(true)}>🗑️ Excluir</Btn>}
             <Btn outline small onClick={onClose}>Cancelar</Btn>
-            <Btn onClick={handleSave}>✅ Registrar</Btn>
+            <button onClick={handleSave} disabled={miniSaving}
+              style={{background:miniSaving?'#333':'#16140f',border:'none',color:'#f2ede3',borderRadius:5,
+                padding:'8px 20px',fontSize:11,fontWeight:600,cursor:miniSaving?'not-allowed':'pointer',
+                display:'flex',alignItems:'center',gap:8,fontFamily:'Inter,sans-serif',letterSpacing:'.04em'}}>
+              {miniSaving
+                ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B99A54" strokeWidth="1.8" style={{animation:'spin 1s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Salvando</>
+                : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B99A54" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg> Registrar</>
+              }
+            </button>
           </div>
         </div>
       </div>
@@ -471,6 +499,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   const[dragging,setDragging]=useState(false)
   const[lastTouch,setLastTouch]=useState(null)
   const[saving,setSaving]=useState(false)
+  const[tipologia,setTipologia]=useState('')
   const dragStart=useRef(null)
 
   const plantaObj=plantas[pavAtivo]
@@ -534,7 +563,6 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
     setSaving(true)
     await onSavePlanta(pavAtivo,planta,plantaNome||pavAtivo)
     setSaving(false)
-    alert(`Planta "${plantaNome||pavAtivo}" salva com sucesso!`)
   }
 
   const handleImgClick=e=>{
@@ -562,6 +590,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
 
   return(
     <div style={{display:'flex',gap:0}}>
+      <style>{'@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}'}</style>
       {/* Painel de Pavimentos */}
       <div style={{width:isMobile?110:150,flexShrink:0,background:'#16140f',borderRadius:'10px 0 0 10px',padding:'12px 6px',display:'flex',flexDirection:'column',alignItems:'center'}}>
         <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:'Inter,sans-serif'}}>PAVIMENTOS</div>
@@ -570,11 +599,22 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         </div>
         <div style={{marginTop:10,width:'100%',padding:'10px 4px 0',borderTop:'1px solid #2C2C28'}}>
           {addPav
-            ?<div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <input value={newPav} onChange={e=>setNewPav(e.target.value)} placeholder="Nome" style={{fontSize:11,padding:'5px 8px',borderRadius:5,border:'1px solid #444',background:JET2,color:WHITE,width:'100%',boxSizing:'border-box'}}/>
-              <div style={{display:'flex',gap:4}}>
-                <button onClick={()=>{if(newPav.trim()){setPavimentos([...pavimentos,newPav.trim()]);setPavAtivo(newPav.trim());}setAddPav(false);setNewPav('');}} style={{flex:1,background:GOLD,color:WHITE,border:'none',borderRadius:5,padding:'5px 0',fontSize:11,cursor:'pointer'}}>OK</button>
-                <button onClick={()=>{setAddPav(false);setNewPav('');}} style={{flex:1,background:'transparent',color:'#666',border:'1px solid #444',borderRadius:5,padding:'5px 0',fontSize:11,cursor:'pointer'}}>✕</button>
+            ?<div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {/* Tipologia: Subsolo / Pavimento / Cobertura */}
+              <div style={{display:'flex',gap:3}}>
+                {[['Sub','Subsolo'],['Pav','Pavimento'],['Cob','Cobertura']].map(([k,v])=>(
+                  <button key={k} onClick={()=>{
+                    const num = pavimentos.filter(p=>new RegExp(v,'i').test(p)).length + 1
+                    const nome = v==='Subsolo'?`${num}º Subsolo`:v==='Cobertura'?'Cobertura':`${num}º Pavimento`
+                    setNewPav(nome)
+                    setTipologia(v)
+                  }} style={{flex:1,background:tipologia===v?'#B99A54':'transparent',color:tipologia===v?'#16140f':'#736d5d',border:'1px solid '+(tipologia===v?'#B99A54':'#3a352c'),borderRadius:3,padding:'4px 0',fontSize:8,cursor:'pointer',fontFamily:'Inter,sans-serif',letterSpacing:'.04em',textTransform:'uppercase'}}>{k}</button>
+                ))}
+              </div>
+              <input value={newPav} onChange={e=>setNewPav(e.target.value)} placeholder="Nome do pavimento" style={{fontSize:10,padding:'5px 8px',borderRadius:3,border:'1px solid #3a352c',background:'#1e1b14',color:'#f2ede3',width:'100%',boxSizing:'border-box',fontFamily:'Inter,sans-serif'}}/>
+              <div style={{display:'flex',gap:3}}>
+                <button onClick={()=>{if(newPav.trim()){setPavimentos([...pavimentos,newPav.trim()]);setPavAtivo(newPav.trim());}setAddPav(false);setNewPav('');setTipologia('');}} style={{flex:1,background:'#B99A54',color:'#16140f',border:'none',borderRadius:3,padding:'5px 0',fontSize:10,cursor:'pointer',fontFamily:'Inter,sans-serif',fontWeight:600}}>OK</button>
+                <button onClick={()=>{setAddPav(false);setNewPav('');setTipologia('');}} style={{flex:1,background:'transparent',color:'#736d5d',border:'1px solid #3a352c',borderRadius:3,padding:'5px 0',fontSize:10,cursor:'pointer'}}>✕</button>
               </div>
             </div>
             :<div style={{display:'flex',flexDirection:'column',gap:4}}>
