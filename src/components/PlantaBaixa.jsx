@@ -134,70 +134,97 @@ function UserSel({label,value,onChange,usuarios}){
   </div>
 }
 
-function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
+function CorteInterno({pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
+  const [dragIdx, setDragIdx] = useState(null)
+  const [overIdx, setOverIdx] = useState(null)
   const ordered = [...pavimentos].reverse()
   const svgW = isMobile ? 104 : 130
   const maxW = svgW - 4
 
-  // Regra de largura:
-  // Subsolos → todos iguais ao maior (100%)
-  // Térreo e pavimentos → todos iguais ao Térreo (85%)
-  // Cobertura → menor (52%)
   const getW = (pav) => {
     if (/cobertura/i.test(pav)) return maxW * 0.52
     if (/subsolo/i.test(pav)) return maxW * 1.00
-    if (/mezanino/i.test(pav)) return maxW * 0.85
-    return maxW * 0.85 // térreo + todos os pavimentos
+    return maxW * 0.85
   }
-
   const getH = (pav) => /cobertura/i.test(pav) ? 22 : /subsolo/i.test(pav) ? 17 : 19
 
-  let yPos = 2
-  const rects = ordered.map(pav => {
-    const w = getW(pav), h = getH(pav), x = (svgW - w) / 2
-    const r = { pav, x, y: yPos, w, h }
-    yPos += h + 1
-    return r
-  })
+  const handleDragStart = (i) => setDragIdx(i)
+  const handleDragOver = (e, i) => { e.preventDefault(); setOverIdx(i) }
+  const handleDrop = (i) => {
+    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return }
+    // reorder in "ordered" (reversed) space, then reverse back
+    const newOrdered = [...ordered]
+    const [moved] = newOrdered.splice(dragIdx, 1)
+    newOrdered.splice(i, 0, moved)
+    setPavimentos([...newOrdered].reverse())
+    setDragIdx(null); setOverIdx(null)
+  }
+  const handleDragEnd = () => { setDragIdx(null); setOverIdx(null) }
 
-  const totalH = yPos + 2
-  const terreoRect = rects.find(r => /térreo/i.test(r.pav))
+  const terreoIdx = ordered.findIndex(p => /térreo/i.test(p))
 
   return (
-    <svg width={svgW} height={totalH} style={{display:'block',overflow:'visible'}}>
-      {rects.map(({pav, x, y, w, h}) => {
+    <div style={{width:'100%',display:'flex',flexDirection:'column',gap:1,alignItems:'center',paddingBottom:4}}>
+      {ordered.map((pav, i) => {
         const active = pav === pavAtivo
         const isCob = /cobertura/i.test(pav)
         const isSub = /subsolo/i.test(pav)
+        const isTerr = /térreo/i.test(pav)
         const hasReg = registros.some(r => r.pavimento === pav)
+        const w = getW(pav)
+        const h = getH(pav)
         const bg = active ? '#B99A54' : isCob ? '#444' : isSub ? '#332e24' : '#252118'
-        const border = active ? '#c9a832' : isCob ? '#555' : '#3a352c'
+        const border = dragIdx===i ? '1px solid #B99A54' : overIdx===i ? '1px dashed #B99A54' : 'none'
         const color = active ? '#16140f' : isCob ? '#aaa' : '#8a8477'
         const shortName = pav
           .replace('Pavimento Térreo','Térreo')
           .replace('º Pavimento','º Pav.')
           .replace('º Subsolo','º Sub.')
+        const isTerrLine = i === terreoIdx && i < ordered.length - 1
+
         return (
-          <g key={pav} onClick={() => setPavAtivo(pav)} style={{cursor:'pointer'}}>
-            <rect x={x} y={y} width={w} height={h-1}
-              fill={bg} stroke={border} strokeWidth={active?1.5:.5}
-              rx={isCob?3:1}/>
+          <div key={pav}
+            draggable
+            onDragStart={() => handleDragStart(i)}
+            onDragOver={e => handleDragOver(e, i)}
+            onDrop={() => handleDrop(i)}
+            onDragEnd={handleDragEnd}
+            onClick={() => setPavAtivo(pav)}
+            style={{
+              width: w + 'px', height: h + 'px',
+              background: bg, border,
+              borderRadius: isCob ? 3 : 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              cursor: 'grab', position: 'relative',
+              opacity: dragIdx === i ? 0.5 : 1,
+              boxShadow: isTerrLine ? '0 2px 0 rgba(185,154,84,.35)' : 'none',
+              transition: 'opacity .15s',
+              paddingLeft: 4, paddingRight: 4,
+              boxSizing: 'border-box',
+            }}>
+            {/* Drag handle — 3 dots minimalistas */}
+            <div style={{display:'flex',flexDirection:'column',gap:2,opacity:.3,flexShrink:0}}>
+              <span style={{width:3,height:3,borderRadius:'50%',background:color,display:'block'}}/>
+              <span style={{width:3,height:3,borderRadius:'50%',background:color,display:'block'}}/>
+              <span style={{width:3,height:3,borderRadius:'50%',background:color,display:'block'}}/>
+            </div>
+            {/* Label */}
+            <span style={{
+              flex:1, textAlign:'center',
+              fontSize: isCob ? 7 : 6.5,
+              fontWeight: active ? 700 : 400,
+              color, fontFamily: 'Inter,sans-serif',
+              letterSpacing: active ? '.04em' : 0,
+              whiteSpace:'nowrap', overflow:'hidden',
+            }}>{shortName}</span>
+            {/* Badge registro */}
             {hasReg && !active && (
-              <circle cx={x+w-5} cy={y+h/2-.5} r={2.5} fill="#B99A54" opacity={.9}/>
+              <span style={{width:4,height:4,borderRadius:'50%',background:'#B99A54',display:'block',flexShrink:0,opacity:.9}}/>
             )}
-            <text x={svgW/2} y={y+h/2+3.5} textAnchor="middle"
-              fontSize={isCob?7:6.5} fontWeight={active?'700':'400'}
-              fill={color} fontFamily="Inter,sans-serif">
-              {shortName}
-            </text>
-          </g>
+          </div>
         )
       })}
-      {terreoRect && (
-        <line x1={0} y1={terreoRect.y+terreoRect.h} x2={svgW} y2={terreoRect.y+terreoRect.h}
-          stroke="#B99A54" strokeWidth={1} strokeDasharray="3,3" opacity={.4}/>
-      )}
-    </svg>
+    </div>
   )
 }
 
@@ -585,7 +612,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
       <div style={{width:isMobile?110:150,flexShrink:0,background:'#16140f',borderRadius:'10px 0 0 10px',padding:'12px 6px',display:'flex',flexDirection:'column',alignItems:'center'}}>
         <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:'Inter,sans-serif'}}>PAVIMENTOS</div>
         <div style={{width:'100%',overflowY:'auto',maxHeight:480}}>
-          <CorteInterno pavimentos={pavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros} isMobile={isMobile}/>
+          <CorteInterno pavimentos={pavimentos} setPavimentos={setPavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros} isMobile={isMobile}/>
         </div>
         <div style={{marginTop:10,width:'100%',padding:'10px 4px 0',borderTop:'1px solid #2C2C28'}}>
           {addPav
@@ -603,7 +630,21 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
               </div>
               <input value={newPav} onChange={e=>setNewPav(e.target.value)} placeholder="Nome do pavimento" style={{fontSize:10,padding:'5px 8px',borderRadius:3,border:'1px solid #3a352c',background:'#1e1b14',color:'#f2ede3',width:'100%',boxSizing:'border-box',fontFamily:'Inter,sans-serif'}}/>
               <div style={{display:'flex',gap:3}}>
-                <button onClick={()=>{if(newPav.trim()){setPavimentos([...pavimentos,newPav.trim()]);setPavAtivo(newPav.trim());}setAddPav(false);setNewPav('');setTipologia('');}} style={{flex:1,background:'#B99A54',color:'#16140f',border:'none',borderRadius:3,padding:'5px 0',fontSize:10,cursor:'pointer',fontFamily:'Inter,sans-serif',fontWeight:600}}>OK</button>
+                <button onClick={()=>{if(newPav.trim()){
+              // Inserir na posição correta: subsolos no final, cobertura no início, pavimentos antes da cobertura
+              const isSub = /subsolo/i.test(newPav)
+              const isCob = /cobertura/i.test(newPav)
+              let novos = [...pavimentos]
+              if(isSub){ novos = [newPav.trim(),...novos] }
+              else if(isCob){ novos = [...novos,newPav.trim()] }
+              else {
+                // Inserir antes da cobertura
+                const cobIdx = novos.findIndex(p=>/cobertura/i.test(p))
+                if(cobIdx>=0){ novos.splice(cobIdx,0,newPav.trim()) }
+                else { novos = [...novos,newPav.trim()] }
+              }
+              setPavimentos(novos);setPavAtivo(newPav.trim())
+            }setAddPav(false);setNewPav('');setTipologia('');}} style={{flex:1,background:'#B99A54',color:'#16140f',border:'none',borderRadius:3,padding:'5px 0',fontSize:10,cursor:'pointer',fontFamily:'Inter,sans-serif',fontWeight:600}}>OK</button>
                 <button onClick={()=>{setAddPav(false);setNewPav('');setTipologia('');}} style={{flex:1,background:'transparent',color:'#736d5d',border:'1px solid #3a352c',borderRadius:3,padding:'5px 0',fontSize:10,cursor:'pointer'}}>✕</button>
               </div>
             </div>
@@ -670,7 +711,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         >
           {!planta&&regsAtivos.length===0?(
             <div onClick={()=>fileRef.current.click()} style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#BBB',gap:10}}>
-              <div style={{fontSize:44}}>🗺️</div>
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#CDC9B8" strokeWidth="1"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
               <div style={{fontSize:14}}>Adicionar planta para <b>{pavAtivo}</b></div>
             </div>
           ):(
@@ -680,7 +721,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
                   <img src={planta} alt="Planta" style={{width:'100%',display:'block',maxHeight:520,objectFit:'contain',userSelect:'none',pointerEvents:'none'}}/>
                 </div>
                 :<div style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#CCC',gap:8,pointerEvents:'none'}}>
-                  <div style={{fontSize:32}}>🗺️</div>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#CDC9B8" strokeWidth="1"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
                   <div style={{fontSize:12}}>{plantaObj?.loading?'Carregando planta...':'Clique para adicionar planta'}</div>
                 </div>
               }
