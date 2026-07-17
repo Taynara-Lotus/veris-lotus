@@ -134,27 +134,42 @@ function UserSel({label,value,onChange,usuarios}){
   </div>
 }
 
-function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros}){
+function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
   const ordered=[...pavimentos].reverse()
-  const getH=p=>p==='Cobertura'?28:/subsolo/i.test(p)?18:p==='Mezanino'?20:21
-  const getW=(p,mW)=>p==='Cobertura'?mW*.68:/4º subsolo/i.test(p)?mW:/3º subsolo/i.test(p)?mW*.96:/2º subsolo/i.test(p)?mW*.92:/1º subsolo/i.test(p)?mW*.88:mW*.84
-  const maxW=138,svgW=maxW+4
-  const totalH=ordered.reduce((s,p)=>s+getH(p),0)+4
-  let yPos=2
-  const rects=ordered.map(pav=>{const h=getH(pav),w=getW(pav,maxW),x=(svgW-w)/2,r={pav,x,y:yPos,w,h};yPos+=h;return r;})
-  const terreoRect=rects.find(r=>/térreo/i.test(r.pav))
+  const total = ordered.length
+  const maxW = isMobile ? 110 : 130
+
   return(
-    <svg width={svgW} height={totalH+4} style={{display:'block',overflow:'visible'}}>
-      {rects.map(({pav,x,y,w,h})=>{
-        const active=pav===pavAtivo,isC=pav==='Cobertura',isSub=/subsolo/i.test(pav),hasReg=registros.some(r=>r.pavimento===pav)
-        return <g key={pav} onClick={()=>setPavAtivo(pav)} style={{cursor:'pointer'}}>
-          <rect x={x} y={y} width={w} height={h-1} fill={active?GOLD:isC?'#555':isSub?'#28281E':'#232320'} stroke={active?GOLD2:isC?'#666':'#3A3A34'} strokeWidth={active?1.5:.5} rx={isC?3:1}/>
-          {hasReg&&!active&&<circle cx={x+w-5} cy={y+h/2-.5} r={2.5} fill={GOLD} opacity={.8}/>}
-          <text x={svgW/2} y={y+h/2+3.5} textAnchor="middle" fontSize={isC?8:7} fontWeight={active?'700':'400'} fill={active?WHITE:isC?BEIGE:'#777'} fontFamily="'Helvetica Neue',Arial,sans-serif">{pav}</text>
-        </g>
+    <div style={{display:'flex',flexDirection:'column',gap:1,width:'100%',alignItems:'center',paddingBottom:4}}>
+      {ordered.map((pav,i)=>{
+        const active = pav===pavAtivo
+        const isCobertura = pav==='Cobertura'
+        const isSub = /subsolo/i.test(pav)
+        const isTerr = /térreo/i.test(pav)
+        const hasReg = registros.some(r=>r.pavimento===pav)
+        // Tapered width: cobertura=52%, subsolo wider, normal tapers up
+        const ratio = isCobertura ? 0.52 : isSub
+          ? 0.92 + (total - i) * 0.01
+          : 0.62 + (i / total) * 0.25
+        const w = Math.min(1, ratio) * 100
+        const bg = active ? '#B99A54' : isTerr ? '#2a2620' : isSub ? '#332e24' : '#211e17'
+        const color = active ? '#16140f' : isTerr ? '#9a927e' : '#8a8477'
+        return (
+          <div key={pav} onClick={()=>setPavAtivo(pav)}
+            style={{width:w+'%',padding:'5px 0',fontSize:8,textAlign:'center',
+              background:bg,color,fontWeight:active?700:400,cursor:'pointer',
+              borderRadius:active?3:0,position:'relative',
+              letterSpacing:active?'.04em':0,transition:'background .15s',
+              fontFamily:"Inter,-apple-system,sans-serif"}}>
+            {pav.length > 12 ? pav.replace('Pavimento','Pav.').replace('Subsolo','Sub.') : pav}
+            {hasReg && !active && (
+              <span style={{position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',
+                width:5,height:5,borderRadius:'50%',background:'#B99A54',display:'inline-block'}}/>
+            )}
+          </div>
+        )
       })}
-      {terreoRect&&<line x1={0} y1={terreoRect.y+terreoRect.h} x2={svgW} y2={terreoRect.y+terreoRect.h} stroke={GOLD} strokeWidth={1.2} strokeDasharray="4,3" opacity={.55}/>}
-    </svg>
+    </div>
   )
 }
 
@@ -425,7 +440,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   )
 }
 
-export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId,usuarios}){
+export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId,usuarios,isMobile}){
   const canvasRef=useRef()
   const fileRef=useRef()
   const[addPav,setAddPav]=useState(false)
@@ -527,10 +542,10 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   return(
     <div style={{display:'flex',gap:0}}>
       {/* Painel de Pavimentos */}
-      <div style={{width:160,flexShrink:0,background:JET,borderRadius:'10px 0 0 10px',padding:'14px 8px',display:'flex',flexDirection:'column',alignItems:'center'}}>
-        <div style={{fontSize:9,color:'#666',letterSpacing:2,textTransform:'uppercase',marginBottom:10}}>Pavimentos</div>
+      <div style={{width:isMobile?110:150,flexShrink:0,background:'#16140f',borderRadius:'10px 0 0 10px',padding:'12px 6px',display:'flex',flexDirection:'column',alignItems:'center'}}>
+        <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:"Inter,sans-serif"}}>PAVIMENTOS</div>
         <div style={{width:'100%',overflowY:'auto',maxHeight:480}}>
-          <CorteInterno pavimentos={pavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros}/>
+          <CorteInterno pavimentos={pavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros} isMobile={isMobile}/>
         </div>
         <div style={{marginTop:10,width:'100%',padding:'10px 4px 0',borderTop:'1px solid #2C2C28'}}>
           {addPav
@@ -560,7 +575,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
 
       {/* Área da planta */}
       <div style={{flex:1,background:WHITE,borderRadius:'0 10px 10px 0',border:`1px solid ${BEIGE}`,borderLeft:'none',overflow:'hidden'}}>
-        <div style={{background:BEIGE2,padding:'8px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${BEIGE}`}}>
+        <div style={{background:'#faf8f3',padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid #e4dfd0'}}>
           <div>
             <span style={{fontSize:12,fontWeight:700,color:GOLD}}>{pavAtivo}</span>
             {plantaNome&&<span style={{marginLeft:10,fontSize:10,color:'#999',fontStyle:'italic'}}>📄 {plantaNome}</span>}
