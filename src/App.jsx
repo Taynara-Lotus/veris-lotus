@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   getObra, saveObra, getRegistros, getAtividades, mapAtividades, getJuntas, getUsuarios,
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
@@ -14,6 +14,19 @@ import TelaInicial from './components/TelaInicial'
 import MemoriaComandos from './components/MemoriaComandos'
 
 const GOLD='#B99A54', BEIGE='#e4dfd0', JET='#16140f', JET2='#1a1612', JET3='#2a2620', WHITE='#FFFFFF'
+const PF = "'Playfair Display',Georgia,serif"
+const IN = "Inter,-apple-system,sans-serif"
+
+// Hook de responsividade
+function useIsMobile() {
+  const [mob, setMob] = React.useState(window.innerWidth < 768)
+  React.useEffect(() => {
+    const h = () => setMob(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+  return mob
+}
 
 const PAVIMENTOS_DEFAULT=[
   '4º Subsolo','3º Subsolo','2º Subsolo','1º Subsolo',
@@ -212,6 +225,7 @@ export default function App() {
     resetSerialForEmp(empId, () => logAction('Nº de série reiniciado'))
   }
 
+  const isMobile = useIsMobile()
   const TABS = ['Dados da Obra', 'Registros', 'Gestão de Registros', 'Vista 3D', 'Memória de Comandos']
 
   if (!authed || !obraAberta) {
@@ -283,10 +297,10 @@ export default function App() {
             onSaveRegistro={handleSaveRegistro} onDeleteRegistro={handleDeleteRegistro}
             onSaveAtividade={handleSaveAtividade} onDeleteAtividade={handleDeleteAtividade}
             onSaveJunta={handleSaveJunta} onDeleteJunta={handleDeleteJunta}
-            empId={empId} usuarios={usuarios}
+            empId={empId} usuarios={usuarios} isMobile={isMobile}
           />
         )}
-        {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial}/>}
+        {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial} isMobile={isMobile}/>}
         {tab===3 && <Vista3D registros={registros} pavimentos={pavimentos} atividades={atividades}/>}
         {tab===4 && <MemoriaComandos logs={logs} currentUser={currentUser} onDeleteLogs={async (indices) => {
           const toDelete = indices.map(i => logs[i]).filter(Boolean)
