@@ -1,4 +1,14 @@
 import { useState, useEffect } from 'react'
+
+function useIsMobile() {
+  const [mob, setMob] = useState(window.innerWidth < 768)
+  useEffect(() => {
+    const h = () => setMob(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+  return mob
+}
 import { getEmpreendimentos, saveEmpreendimento, deleteEmpreendimento, getUsuarios, saveUsuario, loginUsuario } from '../supabase'
 
 // ── Design tokens 4A ─────────────────────────────────────────────
@@ -166,6 +176,7 @@ function UserModal({ user, onClose, onSave, isAdmGlobal }) {
 }
 
 export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser, onLogout, onUserUpdate }) {
+  const isMobile = useIsMobile()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [loginErr, setLoginErr] = useState('')
