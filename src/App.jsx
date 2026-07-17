@@ -13,7 +13,7 @@ import Vista3D from './components/Vista3D'
 import TelaInicial from './components/TelaInicial'
 import MemoriaComandos from './components/MemoriaComandos'
 
-const GOLD='#68541F', BEIGE='#CDC9B8', JET='#1A1A18', JET2='#2C2C28', JET3='#3E3E38', WHITE='#FFFFFF'
+const GOLD='#B99A54', BEIGE='#e4dfd0', JET='#16140f', JET2='#1a1612', JET3='#2a2620', WHITE='#FFFFFF'
 
 const PAVIMENTOS_DEFAULT=[
   '4º Subsolo','3º Subsolo','2º Subsolo','1º Subsolo',
@@ -251,10 +251,22 @@ export default function App() {
         </div>
       </div>
 
-      <div style={{display:'flex',background:JET2,borderBottom:`1px solid ${JET3}`,overflowX:'auto',position:'sticky',top:56,zIndex:99}}>
-        {TABS.map((t,i) => (
-          <button key={i} onClick={()=>setTab(i)} style={{padding:'12px 18px',border:'none',background:'transparent',color:tab===i?BEIGE:'#666',fontWeight:tab===i?700:400,fontSize:11,cursor:'pointer',letterSpacing:.8,textTransform:'uppercase',borderBottom:tab===i?`2px solid ${GOLD}`:'2px solid transparent',whiteSpace:'nowrap',transition:'all .2s'}}>{t}</button>
-        ))}
+      {/* Tabs — pill style 4A */}
+      <div style={{background:'#16140f',padding:'10px 20px',position:'sticky',top:56,zIndex:99,overflowX:'auto'}}>
+        <div style={{display:'inline-flex',alignItems:'center',gap:1,background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.08)',borderRadius:999,padding:3,whiteSpace:'nowrap'}}>
+          {TABS.map((t,i) => (
+            <button key={i} onClick={()=>setTab(i)}
+              style={{padding:'7px 12px',borderRadius:999,border:'none',
+                background:tab===i?'#B99A54':'transparent',
+                color:tab===i?'#16140f':'rgba(255,255,255,.45)',
+                fontSize:9,letterSpacing:'.04em',cursor:'pointer',
+                fontWeight:tab===i?700:400,
+                fontFamily:'Inter,-apple-system,sans-serif',
+                transition:'all .18s',whiteSpace:'nowrap'}}>
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{padding:20,maxWidth:1100,margin:'0 auto'}}>
