@@ -174,7 +174,7 @@ function exportExcel(registros) {
   URL.revokeObjectURL(url)
 }
 
-export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial,isMobile}){
+export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial,isMobile=false}){
   const[open,setOpen]=useState(null)
   const[search,setSearch]=useState('')
   const[confirmDel,setConfirmDel]=useState(null)
@@ -203,7 +203,7 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
     <div>
       {/* Barra superior */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
-        <h2 style={{color:'#16140f',margin:0,fontWeight:500,fontFamily:"'Playfair Display',serif",fontSize:18,letterSpacing:.02}}>Gestão de Registros</h2>
+        <h2 style={{color:'#16140f',margin:0,fontWeight:500,fontFamily:"'Playfair Display',Georgia,serif",fontSize:isMobile?16:18,letterSpacing:.01}}>Gestão de Registros</h2>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <div style={{fontSize:13,color:'#888'}}>{registros.length} registro(s)</div>
 
@@ -258,7 +258,7 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
           const pendentes=reg.coments?.filter(c=>c.status==='pendente').length||0
 
           return(
-            <div key={reg.id} style={{border:'1px solid #e4dfd0',borderRadius:8,overflow:'hidden',background:WHITE,boxShadow:'0 2px 12px -4px rgba(22,20,15,.08)'}}>
+            <div key={reg.id} style={{border:'1px solid #e4dfd0',borderRadius:8,overflow:'hidden',background:'#FFFFFF',boxShadow:'0 2px 8px -3px rgba(22,20,15,.06)'}}>
               {/* 4A: row minimalista com ícone lixeira */}
               <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',
                 borderBottom:'1px solid #ece7d9',background:isOpen?'#f2ede3':WHITE,
