@@ -174,7 +174,7 @@ function exportExcel(registros) {
   URL.revokeObjectURL(url)
 }
 
-export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial}){
+export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial,isMobile}){
   const[open,setOpen]=useState(null)
   const[search,setSearch]=useState('')
   const[confirmDel,setConfirmDel]=useState(null)
@@ -202,8 +202,8 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
   return(
     <div>
       {/* Barra superior */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:10}}>
-        <h2 style={{color:GOLD,margin:0,fontWeight:300,letterSpacing:1}}>Gestão de Registros</h2>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
+        <h2 style={{color:'#16140f',margin:0,fontWeight:500,fontFamily:"'Playfair Display',serif",fontSize:18,letterSpacing:.02}}>Gestão de Registros</h2>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <div style={{fontSize:13,color:'#888'}}>{registros.length} registro(s)</div>
 
@@ -213,7 +213,7 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
           {/* ── Botão Exportar ── */}
           <div style={{position:'relative'}}>
             <button onClick={()=>setExportMenu(!exportMenu)}
-              style={{background:JET,border:`1.5px solid ${JET}`,color:WHITE,borderRadius:6,padding:'7px 14px',fontSize:12,fontWeight:600,cursor:'pointer',letterSpacing:.3,display:'flex',alignItems:'center',gap:6}}>
+              style={{background:'#16140f',border:'none',color:'#faf8f3',borderRadius:4,padding:'7px 14px',fontSize:9,fontWeight:600,cursor:'pointer',letterSpacing:'.12em',textTransform:'uppercase',display:'flex',alignItems:'center',gap:6,fontFamily:"Inter,sans-serif"}}>
               ⬇ Exportar {exportMenu?'▲':'▼'}
             </button>
             {exportMenu && (
@@ -258,21 +258,46 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
           const pendentes=reg.coments?.filter(c=>c.status==='pendente').length||0
 
           return(
-            <div key={reg.id} style={{border:`1px solid ${BEIGE}`,borderRadius:10,overflow:'hidden',background:WHITE,boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>
-              <div onClick={()=>setOpen(isOpen?null:reg.id)}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',cursor:'pointer',background:isOpen?'#EDE8DF':WHITE,transition:'background .15s'}}>
-                <div style={{position:'relative',width:24,height:24,flexShrink:0}}>
-                  <div style={{width:24,height:24,borderRadius:'50%',background:cor,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>📷</div>
+            <div key={reg.id} style={{border:'1px solid #e4dfd0',borderRadius:8,overflow:'hidden',background:WHITE,boxShadow:'0 2px 12px -4px rgba(22,20,15,.08)'}}>
+              {/* 4A: row minimalista com ícone lixeira */}
+              <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',
+                borderBottom:'1px solid #ece7d9',background:isOpen?'#f2ede3':WHITE,
+                transition:'background .12s',cursor:'pointer'}}
+                onClick={()=>setOpen(isOpen?null:reg.id)}>
+                {/* Círculo colorido com badge pendentes */}
+                <div style={{position:'relative',flexShrink:0}}>
+                  <div style={{width:22,height:22,borderRadius:'50%',background:cor}}/>
                   {pendentes>0&&(
-                    <div style={{position:'absolute',top:-4,right:-4,width:14,height:14,borderRadius:'50%',background:'#C62828',border:'1.5px solid white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:WHITE,lineHeight:1}}>{pendentes}</div>
+                    <div style={{position:'absolute',top:-3,right:-3,width:11,height:11,borderRadius:'50%',
+                      background:'#c0392b',border:'1.5px solid white',display:'flex',alignItems:'center',
+                      justifyContent:'center',fontSize:6,fontWeight:700,color:WHITE,lineHeight:1}}>{pendentes}</div>
                   )}
                 </div>
-                <div style={{minWidth:90,fontWeight:700,color:GOLD,fontSize:13}}>{reg.serial||'—'}</div>
-                <div style={{flex:1,fontSize:13,color:JET,fontWeight:500}}>{reg.atividade||'—'}</div>
-                <div style={{fontSize:12,color:'#888',minWidth:100}}>{reg.pavimento||'—'}</div>
-                {pendentes>0&&<div style={{fontSize:10,color:'#C62828',fontWeight:600,whiteSpace:'nowrap'}}>⚠ {pendentes} pend.</div>}
-                <div style={{fontSize:11,color:'#AAA',minWidth:120,textAlign:'right'}}>{reg.horario||'—'}</div>
-                <div style={{fontSize:14,color:'#CCC',marginLeft:6}}>{isOpen?'▲':'▼'}</div>
+                {/* Serial + atividade */}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:isMobile?10:11,color:'#16140f',fontWeight:600,
+                    fontFamily:"Inter,sans-serif",whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                    {reg.serial||'—'} <span style={{fontWeight:400,color:'#736d5d'}}>· {reg.atividade||'—'}</span>
+                  </div>
+                  <div style={{fontSize:8,color:'#9a927e',marginTop:2,fontFamily:"Inter,sans-serif"}}>
+                    {reg.pavimento||'—'} · {reg.horario||'—'}
+                    {pendentes>0&&<span style={{color:'#c0392b'}}> · ⚠ {pendentes} pend.</span>}
+                  </div>
+                </div>
+                {/* Ícone lixeira SVG minimalista (4A) */}
+                <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                  {isOpen && (
+                    <button onClick={e=>{e.stopPropagation();setConfirmDel(reg.id)}}
+                      style={{background:'none',border:'none',cursor:'pointer',padding:4,opacity:.5,transition:'opacity .15s'}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                      onMouseLeave={e=>e.currentTarget.style.opacity=.5}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a39c8b" strokeWidth="1.6">
+                        <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>
+                      </svg>
+                    </button>
+                  )}
+                  <span style={{fontSize:10,color:'#ccc'}}>{isOpen?'▲':'▼'}</span>
+                </div>
               </div>
 
               {isOpen&&(
