@@ -135,36 +135,57 @@ function UserSel({label,value,onChange,usuarios}){
 }
 
 function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
-  const ordered=[...pavimentos].reverse()
+  // Handoff 4A: corte esquemático com larguras em pirâmide
+  // Cobertura=52%, subindo para 100% nos subsolo, térreo ativo em dourado
+  const ordered = [...pavimentos].reverse()
   const total = ordered.length
-  const maxW = isMobile ? 110 : 130
 
-  return(
-    <div style={{display:'flex',flexDirection:'column',gap:1,width:'100%',alignItems:'center',paddingBottom:4}}>
-      {ordered.map((pav,i)=>{
-        const active = pav===pavAtivo
-        const isCobertura = pav==='Cobertura'
-        const isSub = /subsolo/i.test(pav)
-        const isTerr = /térreo/i.test(pav)
-        const hasReg = registros.some(r=>r.pavimento===pav)
-        // Tapered width: cobertura=52%, subsolo wider, normal tapers up
-        const ratio = isCobertura ? 0.52 : isSub
-          ? 0.92 + (total - i) * 0.01
-          : 0.62 + (i / total) * 0.25
-        const w = Math.min(1, ratio) * 100
-        const bg = active ? '#B99A54' : isTerr ? '#2a2620' : isSub ? '#332e24' : '#211e17'
-        const color = active ? '#16140f' : isTerr ? '#9a927e' : '#8a8477'
+  // Calcula width% baseado na posição (cobertura estreita, subsolo largo)
+  const getWidth = (pav, i) => {
+    if (/cobertura/i.test(pav)) return 52
+    if (/4º subsolo/i.test(pav)) return 100
+    if (/3º subsolo/i.test(pav)) return 97
+    if (/2º subsolo/i.test(pav)) return 94
+    if (/1º subsolo/i.test(pav)) return 91
+    if (/subsolo/i.test(pav)) return 88
+    // Pavimentos: escalonar de ~62% (cobertura) para ~88% (térreo)
+    const ratio = i / Math.max(total - 1, 1)
+    return Math.round(62 + ratio * 26)
+  }
+
+  const isTerr = (pav) => /térreo/i.test(pav)
+  const isSub = (pav) => /subsolo/i.test(pav)
+  const isCob = (pav) => /cobertura/i.test(pav)
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:'100%',gap:1,padding:'0 0 4px'}}>
+      {ordered.map((pav, i) => {
+        const active = pav === pavAtivo
+        const w = getWidth(pav, i)
+        const hasReg = registros.some(r => r.pavimento === pav)
+        const bg = active ? '#B99A54' : isTerr(pav) ? '#2a2620' : isSub(pav) ? '#332e24' : '#211e17'
+        const color = active ? '#16140f' : '#8a8477'
+        const shortName = pav
+          .replace('Pavimento Térreo', 'Térreo')
+          .replace('º Pavimento', 'º Pav.')
+          .replace('º Subsolo', 'º Sub.')
+          .replace('Mezanino', 'Mezanino')
         return (
-          <div key={pav} onClick={()=>setPavAtivo(pav)}
-            style={{width:w+'%',padding:'5px 0',fontSize:8,textAlign:'center',
-              background:bg,color,fontWeight:active?700:400,cursor:'pointer',
-              borderRadius:active?3:0,position:'relative',
-              letterSpacing:active?'.04em':0,transition:'background .15s',
-              fontFamily:"Inter,-apple-system,sans-serif"}}>
-            {pav.length > 12 ? pav.replace('Pavimento','Pav.').replace('Subsolo','Sub.') : pav}
+          <div key={pav} onClick={() => setPavAtivo(pav)}
+            style={{
+              width: w + '%', padding: active ? '7px 0' : '6px 0',
+              fontSize: 8, textAlign: 'center', background: bg, color,
+              fontWeight: active ? 700 : 400, cursor: 'pointer',
+              position: 'relative', letterSpacing: '.04em',
+              transition: 'background .12s', fontFamily: "Inter,sans-serif",
+              borderRadius: active ? 3 : 0
+            }}>
+            {shortName}
             {hasReg && !active && (
-              <span style={{position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',
-                width:5,height:5,borderRadius:'50%',background:'#B99A54',display:'inline-block'}}/>
+              <span style={{
+                position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+                width: 4, height: 4, borderRadius: '50%', background: '#B99A54', display: 'inline-block'
+              }}/>
             )}
           </div>
         )
@@ -543,7 +564,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
     <div style={{display:'flex',gap:0}}>
       {/* Painel de Pavimentos */}
       <div style={{width:isMobile?110:150,flexShrink:0,background:'#16140f',borderRadius:'10px 0 0 10px',padding:'12px 6px',display:'flex',flexDirection:'column',alignItems:'center'}}>
-        <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:"Inter,sans-serif"}}>PAVIMENTOS</div>
+        <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:'Inter,sans-serif'}}>PAVIMENTOS</div>
         <div style={{width:'100%',overflowY:'auto',maxHeight:480}}>
           <CorteInterno pavimentos={pavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros} isMobile={isMobile}/>
         </div>
@@ -577,7 +598,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
       <div style={{flex:1,background:WHITE,borderRadius:'0 10px 10px 0',border:`1px solid ${BEIGE}`,borderLeft:'none',overflow:'hidden'}}>
         <div style={{background:'#faf8f3',padding:'10px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid #e4dfd0'}}>
           <div>
-            <span style={{fontSize:12,fontWeight:700,color:GOLD}}>{pavAtivo}</span>
+            <span style={{fontFamily:"'Playfair Display',serif",fontSize:14,color:'#16140f',fontWeight:500}}>{pavAtivo}</span>
             {plantaNome&&<span style={{marginLeft:10,fontSize:10,color:'#999',fontStyle:'italic'}}>📄 {plantaNome}</span>}
             {plantaUpdatedAt&&<span style={{marginLeft:8,fontSize:9,color:'#bbb'}}>· {fmtDate(plantaUpdatedAt)}</span>}
           </div>
@@ -592,20 +613,20 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
             {planta&&(
               <>
                 <button onClick={handleSavePlanta} disabled={saving}
-                  style={{background:saving?'#888':GOLD,border:`1.5px solid ${saving?'#888':GOLD}`,color:WHITE,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:saving?'not-allowed':'pointer'}}>
-                  {saving?'Salvando…':'💾 Salvar'}
+                  style={{width:26,height:26,background:saving?'#333':'#16140f',border:'none',borderRadius:5,cursor:saving?'not-allowed':'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#B99A54' strokeWidth='2'><polyline points='20 6 9 17 4 12'/></svg>
                 </button>
                 <button onClick={async()=>{
                   if(!window.confirm(`Excluir a planta "${plantaNome||pavAtivo}"?`)) return
                   await onDeletePlanta(pavAtivo)
                   setPlantas(prev=>{const n={...prev};delete n[pavAtivo];return n})
-                }} style={{background:'transparent',border:'1.5px solid #C0392B',color:'#C0392B',borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                  🗑️ Excluir
+                }} style={{width:26,height:26,background:'transparent',border:'1px solid #e4dfd0',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#a35c4a' strokeWidth='1.8'><path d='M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13'/></svg>
                 </button>
               </>
             )}
-            <button onClick={()=>fileRef.current.click()} style={{background:'transparent',border:`1.5px solid ${GOLD}`,color:GOLD,borderRadius:6,padding:'5px 12px',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-              📁 {planta?'Trocar':'Carregar'}
+            <button onClick={()=>fileRef.current.click()} style={{width:26,height:26,background:'transparent',border:'1px solid #e4dfd0',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              {planta ? <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#736d5d' strokeWidth='1.8'><path d='M17 2l4 4-4 4M21 6H8M7 22l-4-4 4-4M3 18h13'/></svg> : <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#736d5d' strokeWidth='1.8'><path d='M12 16V4M7 9l5-5 5 5'/><path d='M4 20h16'/></svg>}
             </button>
           </div>
         </div>
