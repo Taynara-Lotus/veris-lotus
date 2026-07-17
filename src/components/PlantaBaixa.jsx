@@ -135,31 +135,22 @@ function UserSel({label,value,onChange,usuarios}){
 }
 
 function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
-  // Desenho original: SVG com retângulos escalonados
-  // Subsolo: largura máxima (mais largos)
-  // Térreo até último pavimento: médios
-  // Cobertura: mais estreito
   const ordered = [...pavimentos].reverse()
   const svgW = isMobile ? 104 : 130
   const maxW = svgW - 4
 
+  // Regra de largura:
+  // Subsolos → todos iguais ao maior (100%)
+  // Térreo e pavimentos → todos iguais ao Térreo (85%)
+  // Cobertura → menor (52%)
   const getW = (pav) => {
     if (/cobertura/i.test(pav)) return maxW * 0.52
-    if (/4º subsolo/i.test(pav)) return maxW
-    if (/3º subsolo/i.test(pav)) return maxW * 0.97
-    if (/2º subsolo/i.test(pav)) return maxW * 0.94
-    if (/1º subsolo/i.test(pav)) return maxW * 0.91
-    if (/subsolo/i.test(pav)) return maxW * 0.88
-    if (/mezanino/i.test(pav)) return maxW * 0.82
-    if (/térreo/i.test(pav)) return maxW * 0.85
-    // Pavimentos: escalonar entre 0.62 e 0.84
-    const total = ordered.filter(p => !/subsolo|cobertura|mezanino|térreo/i.test(p)).length
-    const idx = ordered.filter(p => !/subsolo|cobertura|mezanino|térreo/i.test(p)).indexOf(pav)
-    if (idx < 0) return maxW * 0.75
-    return maxW * (0.62 + (idx / Math.max(total-1,1)) * 0.22)
+    if (/subsolo/i.test(pav)) return maxW * 1.00
+    if (/mezanino/i.test(pav)) return maxW * 0.85
+    return maxW * 0.85 // térreo + todos os pavimentos
   }
 
-  const getH = (pav) => /cobertura/i.test(pav) ? 22 : /subsolo/i.test(pav) ? 17 : /mezanino/i.test(pav) ? 18 : 19
+  const getH = (pav) => /cobertura/i.test(pav) ? 22 : /subsolo/i.test(pav) ? 17 : 19
 
   let yPos = 2
   const rects = ordered.map(pav => {
@@ -178,9 +169,8 @@ function CorteInterno({pavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
         const active = pav === pavAtivo
         const isCob = /cobertura/i.test(pav)
         const isSub = /subsolo/i.test(pav)
-        const isTerr = /térreo/i.test(pav)
         const hasReg = registros.some(r => r.pavimento === pav)
-        const bg = active ? '#B99A54' : isCob ? '#444' : isSub ? '#332e24' : isTerr ? '#2a2620' : '#252118'
+        const bg = active ? '#B99A54' : isCob ? '#444' : isSub ? '#332e24' : '#252118'
         const border = active ? '#c9a832' : isCob ? '#555' : '#3a352c'
         const color = active ? '#16140f' : isCob ? '#aaa' : '#8a8477'
         const shortName = pav
