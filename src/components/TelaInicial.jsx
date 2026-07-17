@@ -169,7 +169,9 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [loginErr, setLoginErr] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
   const [forgotMode, setForgotMode] = useState(false)
+  const [showSenha, setShowSenha] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotMsg, setForgotMsg] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
@@ -198,7 +200,9 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
 
   const handleLogin = async () => {
     if (!email || !senha) { setLoginErr('Preencha e-mail e senha.'); return }
+    setLoginLoading(true)
     const [u, empsData] = await Promise.all([loginUsuario(email.trim().toLowerCase(), senha), getEmpreendimentos()])
+    setLoginLoading(false)
     if (u) { setLoginErr(''); setEmps(empsData); setLoading(false); onLogin(u); setProfileForm(u) }
     else setLoginErr('E-mail ou senha incorretos.')
   }
@@ -257,16 +261,41 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
           {/* Form credenciais */}
           <div style={{width:250,display:'flex',flexDirection:'column',gap:0}}>
             <Field label="E-mail" value={email} onChange={setEmail} type="email"/>
-            <Field label="Senha" value={senha} onChange={setSenha} type="password"/>
+            {/* Campo senha com ícone olho */}
+            <div style={{marginBottom:20,position:'relative'}}>
+              <div style={{fontSize:9,letterSpacing:'.15em',textTransform:'uppercase',color:SUBTLE,marginBottom:6,fontFamily:IN}}>SENHA</div>
+              <div style={{position:'relative'}}>
+                <input type={showSenha?'text':'password'} value={senha} onChange={e=>setSenha(e.target.value)}
+                  onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+                  style={{width:'100%',boxSizing:'border-box',background:'transparent',border:'none',
+                    borderBottom:'1px solid #3a352c',color:'#f2ede3',padding:'8px 28px 8px 0',fontSize:13,
+                    fontWeight:300,outline:'none',fontFamily:IN}}/>
+                <button onClick={()=>setShowSenha(!showSenha)}
+                  style={{position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',
+                    background:'none',border:'none',cursor:'pointer',padding:2,opacity:.45,transition:'opacity .15s'}}
+                  onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                  onMouseLeave={e=>e.currentTarget.style.opacity=.45}>
+                  {showSenha
+                    ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a8477" strokeWidth="1.5"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8a8477" strokeWidth="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
+            </div>
             {loginErr && <div style={{fontSize:11,color:'#e74c3c',marginBottom:8,marginTop:-8}}>{loginErr}</div>}
-            <button onClick={handleLogin} onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+            <button onClick={handleLogin} onKeyDown={e=>e.key==='Enter'&&handleLogin()} disabled={loginLoading}
               style={{marginTop:24,height:42,border:`1px solid ${GOLD}`,background:'transparent',color:GOLD,
-                fontSize:10,letterSpacing:'.2em',textTransform:'uppercase',cursor:'pointer',fontFamily:IN,
-                fontWeight:600,borderRadius:2,transition:'all .2s'}}
-              onMouseEnter={e=>{e.target.style.background=GOLD;e.target.style.color=JET}}
-              onMouseLeave={e=>{e.target.style.background='transparent';e.target.style.color=GOLD}}>
-              ENTRAR
+                fontSize:10,letterSpacing:'.2em',textTransform:'uppercase',cursor:loginLoading?'not-allowed':'pointer',
+                fontFamily:IN,fontWeight:600,borderRadius:2,transition:'all .2s',
+                display:'flex',alignItems:'center',justifyContent:'center',gap:10}}
+              onMouseEnter={e=>{if(!loginLoading){e.currentTarget.style.background=GOLD;e.currentTarget.style.color=JET}}}
+              onMouseLeave={e=>{if(!loginLoading){e.currentTarget.style.background='transparent';e.currentTarget.style.color=GOLD}}}>
+              {loginLoading
+                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B99A54" strokeWidth="1.8" style={{animation:'spin 1s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                : 'ENTRAR'
+              }
             </button>
+            <style>{"@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}"}</style>
             <button onClick={()=>setForgotMode(true)} style={{marginTop:14,background:'none',border:'none',color:WARM,fontSize:9,letterSpacing:'.08em',cursor:'pointer',fontFamily:IN}}>
               Esqueci minha senha
             </button>
@@ -368,7 +397,7 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
             {showArchived ? 'Nenhum empreendimento arquivado.' : 'Nenhum empreendimento cadastrado.'}
           </div>
         ) : (
-          <div style={{display:'flex',flexDirection:'column',gap:22}}>
+          <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(280px,1fr))',gap:isMobile?22:28}}>
             {empsVisiveis.map(emp=>(
               <div key={emp.id} style={{cursor:'pointer',position:'relative'}}>
                 <div onClick={()=>onSelectObra(emp)}
@@ -376,7 +405,7 @@ export default function TelaInicial({ onLogin, onSelectObra, authed, currentUser
                   onMouseLeave={e=>e.currentTarget.style.transform='translateY(0)'}
                   style={{transition:'transform .28s ease'}}>
                   {/* Imagem com border-radius grande */}
-                  <div style={{width:'100%',aspectRatio:'16/7',borderRadius:20,overflow:'hidden',
+                  <div style={{width:'100%',aspectRatio:isMobile?'16/7':'3/2',borderRadius:isMobile?20:14,overflow:'hidden',
                     background:'linear-gradient(160deg,#d9d2bf,#c3bba3)',position:'relative',
                     boxShadow:'0 12px 28px -10px rgba(60,52,30,.22)'}}>
                     {emp.foto && !imgErrors[emp.id]
