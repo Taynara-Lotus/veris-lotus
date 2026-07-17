@@ -131,9 +131,19 @@ export default function DadosObra({obra,setObra}){
       </div>
 
       <div style={{display:'flex',justifyContent:'flex-end',marginTop:20}}>
-        <button onClick={handleSave} disabled={saving} style={{background:saved?'#2E7D32':GOLD,color:WHITE,border:'none',borderRadius:8,padding:'10px 28px',fontSize:13,fontWeight:700,cursor:'pointer',letterSpacing:.5,transition:'all .3s'}}>
-          {saving?'Salvando...':saved?'✅ Salvo!':'💾 Salvar'}
+        <button onClick={handleSave} disabled={saving}
+          style={{width:36,height:36,borderRadius:5,border:'1px solid #e4dfd0',
+            background:saved?'#16140f':'transparent',cursor:saving?'not-allowed':'pointer',
+            display:'flex',alignItems:'center',justifyContent:'center',transition:'all .2s'}}
+          title={saving?'Salvando...':saved?'Salvo!':'Salvar'}>
+          {saving
+            ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B99A54" strokeWidth="1.8" style={{animation:'spin 1s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            : saved
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B99A54" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#736d5d" strokeWidth="1.8"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          }
         </button>
+        <style>{'@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}'}</style>
       </div>
     </div>
   )
