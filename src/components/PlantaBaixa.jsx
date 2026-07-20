@@ -506,7 +506,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   )
 }
 
-export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId,usuarios,isMobile}){
+export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId,usuarios,isMobile,torres,torreAtiva,onTorreChange,onSaveTorres}){
   const canvasRef=useRef()
   const fileRef=useRef()
   const[addPav,setAddPav]=useState(false)
@@ -518,13 +518,12 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   const[saving,setSaving]=useState(false)
   const[tipologia,setTipologia]=useState('')
   const dragStart=useRef(null)
-  // Torres / Blocos — abas estilo Chrome
-  const[torres,setTorres]=useState(['Torre A'])
-  const[torreAtiva,setTorreAtiva]=useState('Torre A')
-  const[editingTorre,setEditingTorre]=useState(null) // nome que está editando
+  // Torres — estado local para UI (edição de nome)
+  const[editingTorre,setEditingTorre]=useState(null)
   const[editTorreName,setEditTorreName]=useState('')
 
-  const plantaObj=plantas[pavAtivo]
+  const plantaKey=`${torreAtivaLocal}::${pavAtivo}`
+  const plantaObj=plantas[plantaKey]
   const planta=plantaObj?.data||null
   const plantaNome=plantaObj?.nome||null
   const plantaUpdatedAt=plantaObj?.updated_at||null
@@ -607,28 +606,32 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   }
   const handleTouchEnd=()=>setLastTouch(null)
   const closeAll=()=>{setModal(null);setIconClicked(null);}
-  const regsAtivos=registros.filter(r=>r.pavimento===pavAtivo&&(r.torre||'Torre A')===torreAtiva)
+  const regsAtivos=registros.filter(r=>r.pavimento===pavAtivo&&(r.torre||'Torre A')===torreAtivaLocal)
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
+  const torresLocal = torres || ['Torre A']
+  const torreAtivaLocal = torreAtiva || 'Torre A'
+
   const addTorre = () => {
-    const next = String.fromCharCode(65 + torres.length) // A, B, C...
-    const nome = torres.length < 26 ? `Torre ${next}` : `Bloco ${torres.length - 25}`
-    setTorres([...torres, nome])
-    setTorreAtiva(nome)
+    const next = String.fromCharCode(65 + torresLocal.length)
+    const nome = torresLocal.length < 26 ? `Torre ${next}` : `Bloco ${torresLocal.length - 25}`
+    const novas = [...torresLocal, nome]
+    if (onSaveTorres) onSaveTorres(novas)
+    if (onTorreChange) onTorreChange(nome)
   }
 
   const removeTorre = (nome) => {
-    if (torres.length <= 1) return
-    const novas = torres.filter(t => t !== nome)
-    setTorres(novas)
-    if (torreAtiva === nome) setTorreAtiva(novas[novas.length - 1])
+    if (torresLocal.length <= 1) return
+    const novas = torresLocal.filter(t => t !== nome)
+    if (onSaveTorres) onSaveTorres(novas)
+    if (torreAtivaLocal === nome && onTorreChange) onTorreChange(novas[novas.length - 1])
   }
 
   const renameTorre = (nome) => {
     if (!editTorreName.trim() || editTorreName === nome) { setEditingTorre(null); return }
-    const novas = torres.map(t => t === nome ? editTorreName.trim() : t)
-    setTorres(novas)
-    if (torreAtiva === nome) setTorreAtiva(editTorreName.trim())
+    const novas = torresLocal.map(t => t === nome ? editTorreName.trim() : t)
+    if (onSaveTorres) onSaveTorres(novas)
+    if (torreAtivaLocal === nome && onTorreChange) onTorreChange(editTorreName.trim())
     setEditingTorre(null)
   }
 
@@ -642,11 +645,11 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         background:'#f0ece0', borderBottom:'1px solid #e4dfd0',
         paddingLeft:8, overflowX:'auto', minHeight:34,
       }}>
-        {torres.map(torre => {
-          const isAtiva = torre === torreAtiva
+        {torresLocal.map(torre => {
+          const isAtiva = torre === torreAtivaLocal
           return (
             <div key={torre}
-              onClick={() => setTorreAtiva(torre)}
+              onClick={() => { if (onTorreChange) onTorreChange(torre) }}
               style={{
                 display:'flex', alignItems:'center', gap:6,
                 padding:'6px 12px 7px', cursor:'pointer',
@@ -862,7 +865,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo,torre:torreAtiva});closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo,torre:torreAtivaLocal});closeAll();}}/>}
       {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
       </div>
     </div>
