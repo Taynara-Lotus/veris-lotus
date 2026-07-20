@@ -518,6 +518,11 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   const[saving,setSaving]=useState(false)
   const[tipologia,setTipologia]=useState('')
   const dragStart=useRef(null)
+  // Torres / Blocos — abas estilo Chrome
+  const[torres,setTorres]=useState(['Torre A'])
+  const[torreAtiva,setTorreAtiva]=useState('Torre A')
+  const[editingTorre,setEditingTorre]=useState(null) // nome que está editando
+  const[editTorreName,setEditTorreName]=useState('')
 
   const plantaObj=plantas[pavAtivo]
   const planta=plantaObj?.data||null
@@ -602,12 +607,122 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   }
   const handleTouchEnd=()=>setLastTouch(null)
   const closeAll=()=>{setModal(null);setIconClicked(null);}
-  const regsAtivos=registros.filter(r=>r.pavimento===pavAtivo)
+  const regsAtivos=registros.filter(r=>r.pavimento===pavAtivo&&(r.torre||'Torre A')===torreAtiva)
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
+  const addTorre = () => {
+    const next = String.fromCharCode(65 + torres.length) // A, B, C...
+    const nome = torres.length < 26 ? `Torre ${next}` : `Bloco ${torres.length - 25}`
+    setTorres([...torres, nome])
+    setTorreAtiva(nome)
+  }
+
+  const removeTorre = (nome) => {
+    if (torres.length <= 1) return
+    const novas = torres.filter(t => t !== nome)
+    setTorres(novas)
+    if (torreAtiva === nome) setTorreAtiva(novas[novas.length - 1])
+  }
+
+  const renameTorre = (nome) => {
+    if (!editTorreName.trim() || editTorreName === nome) { setEditingTorre(null); return }
+    const novas = torres.map(t => t === nome ? editTorreName.trim() : t)
+    setTorres(novas)
+    if (torreAtiva === nome) setTorreAtiva(editTorreName.trim())
+    setEditingTorre(null)
+  }
+
   return(
-    <div style={{display:'flex',gap:0}}>
+    <div style={{display:'flex',flexDirection:'column',gap:0}}>
       <style>{'@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}'}</style>
+
+      {/* ABAS DE TORRES — estilo Chrome */}
+      <div style={{
+        display:'flex', alignItems:'flex-end', gap:0,
+        background:'#f0ece0', borderBottom:'1px solid #e4dfd0',
+        paddingLeft:8, overflowX:'auto', minHeight:34,
+      }}>
+        {torres.map(torre => {
+          const isAtiva = torre === torreAtiva
+          return (
+            <div key={torre}
+              onClick={() => setTorreAtiva(torre)}
+              style={{
+                display:'flex', alignItems:'center', gap:6,
+                padding:'6px 12px 7px', cursor:'pointer',
+                background: isAtiva ? '#faf8f3' : 'transparent',
+                border: isAtiva ? '1px solid #e4dfd0' : '1px solid transparent',
+                borderBottom: isAtiva ? '1px solid #faf8f3' : 'none',
+                borderRadius:'6px 6px 0 0',
+                marginBottom: isAtiva ? -1 : 0,
+                position:'relative', zIndex: isAtiva ? 1 : 0,
+                minWidth:80, maxWidth:140,
+                transition:'background .12s',
+              }}>
+              {/* Nome editável com duplo clique */}
+              {editingTorre === torre
+                ? <input
+                    autoFocus
+                    value={editTorreName}
+                    onChange={e=>setEditTorreName(e.target.value)}
+                    onBlur={()=>renameTorre(torre)}
+                    onKeyDown={e=>{if(e.key==='Enter')renameTorre(torre);if(e.key==='Escape'){setEditingTorre(null)}}}
+                    onClick={e=>e.stopPropagation()}
+                    style={{
+                      width:'100%', background:'transparent', border:'none',
+                      outline:'none', fontSize:10, color:'#16140f',
+                      fontFamily:'Inter,sans-serif', fontWeight:600,
+                    }}/>
+                : <span
+                    onDoubleClick={e=>{e.stopPropagation();setEditingTorre(torre);setEditTorreName(torre)}}
+                    style={{
+                      fontSize:10, fontFamily:'Inter,sans-serif',
+                      color: isAtiva ? '#16140f' : '#9a927e',
+                      fontWeight: isAtiva ? 600 : 400,
+                      whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                      flex:1,
+                    }}>{torre}</span>
+              }
+              {/* X para fechar — só aparece se hover e tem mais de 1 */}
+              {torres.length > 1 && (
+                <button
+                  onClick={e=>{e.stopPropagation();removeTorre(torre)}}
+                  style={{
+                    background:'none', border:'none', cursor:'pointer',
+                    padding:0, lineHeight:1, opacity: isAtiva ? .5 : .3,
+                    display:'flex', alignItems:'center', flexShrink:0,
+                  }}
+                  onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                  onMouseLeave={e=>e.currentTarget.style.opacity=isAtiva?.5:.3}>
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="#736d5d" strokeWidth="1.5">
+                    <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+          )
+        })}
+        {/* Botão + nova torre */}
+        <button
+          onClick={addTorre}
+          style={{
+            display:'flex', alignItems:'center', justifyContent:'center',
+            width:28, height:28, marginBottom:3, marginLeft:4,
+            background:'transparent', border:'none', cursor:'pointer',
+            borderRadius:4, opacity:.55, transition:'opacity .15s, background .15s',
+            flexShrink:0,
+          }}
+          onMouseEnter={e=>{e.currentTarget.style.opacity=1;e.currentTarget.style.background='rgba(185,154,84,.12)'}}
+          onMouseLeave={e=>{e.currentTarget.style.opacity=.55;e.currentTarget.style.background='transparent'}}
+          title="Adicionar torre / bloco">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B99A54" strokeWidth="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* CONTEÚDO DA TORRE */}
+      <div style={{display:'flex',gap:0}}>
       {/* Painel de Pavimentos */}
       <div style={{width:isMobile?110:150,flexShrink:0,background:'#16140f',borderRadius:'10px 0 0 10px',padding:'12px 6px',display:'flex',flexDirection:'column',alignItems:'center'}}>
         <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:'Inter,sans-serif'}}>PAVIMENTOS</div>
@@ -747,8 +862,9 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo});closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo,torre:torreAtiva});closeAll();}}/>}
       {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
+      </div>
     </div>
   )
 }
