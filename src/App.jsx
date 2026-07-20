@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import {
-  getObra, saveObra, getRegistros, getAtividades, mapAtividades, getJuntas, getUsuarios,
+  getObra, saveObra, getRegistros, getAtividades, mapAtividades, getJuntas, getUsuarios, getTorres, saveTorres,
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
   saveJunta, deleteJunta, getPlantasMeta, getPlantaImagem,
   savePlanta, deletePlanta, getSerialCounter, setSerialCounter,
@@ -76,6 +76,9 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const [logs, setLogs] = useState([])
   const [logsLoaded, setLogsLoaded] = useState(false)
+  // Torres — estado global, persistido no Supabase
+  const [torres, setTorres] = useState(['Torre A'])
+  const [torreAtiva, setTorreAtiva] = useState('Torre A')
 
   const empId = obraAberta?.id
 
@@ -86,8 +89,15 @@ export default function App() {
       setPavimentos(PAVIMENTOS_DEFAULT); setPlantas({}); setRegistros([])
       setAtividades([]); setJuntas([]); setLogs([]); setLogsLoaded(false); setTab(0)
       try {
-        const [obraData, ativsData, juntasData, usersData] = await Promise.all([
-          getObra(empId), getAtividades(empId), getJuntas(empId), getUsuarios()
+        const [obraData, torresData, usersData] = await Promise.all([
+          getObra(empId), getTorres(empId), getUsuarios()
+        ])
+        const torresCarregadas = torresData && torresData.length > 0 ? torresData : ['Torre A']
+        setTorres(torresCarregadas)
+        const torreInicial = torresCarregadas[0]
+        setTorreAtiva(torreInicial)
+        const [ativsData, juntasData] = await Promise.all([
+          getAtividades(empId, torreInicial), getJuntas(empId, torreInicial)
         ])
         if (obraData) setObra(obraData)
         else setObra({ nome: obraAberta.nome, certificacao: obraAberta.cert||'EDGE', nivel_certificacao: obraAberta.nivel||'', versao_certificacao:'', empreendimento_id: empId })
@@ -146,22 +156,43 @@ export default function App() {
   }
   const handleSavePlanta = async (pavimento, imageData, nomeArquivo) => {
     setSyncing(true)
-    await savePlanta(empId, pavimento, imageData, nomeArquivo)
-    setPlantas(prev => ({ ...prev, [pavimento]: { data: imageData, nome: nomeArquivo, updated_at: new Date().toISOString() } }))
-    logAction('Planta carregada', `Pavimento: ${pavimento}`); setSyncing(false)
+    const key = `${torreAtiva}::${pavimento}`
+    await savePlanta(empId, pavimento, imageData, nomeArquivo, torreAtiva)
+    setPlantas(prev => ({ ...prev, [key]: { data: imageData, nome: nomeArquivo, updated_at: new Date().toISOString(), torre: torreAtiva, pavimento } }))
+    logAction('Planta carregada', `Torre: ${torreAtiva} · Pavimento: ${pavimento}`); setSyncing(false)
   }
   const handleDeletePlanta = async (pavimento) => {
-    await deletePlanta(empId, pavimento)
-    setPlantas(prev => { const n={...prev}; delete n[pavimento]; return n })
-    logAction('Pavimento excluído', `Pavimento: ${pavimento}`)
+    const key = `${torreAtiva}::${pavimento}`
+    await deletePlanta(empId, pavimento, torreAtiva)
+    setPlantas(prev => { const n={...prev}; delete n[key]; return n })
+    logAction('Pavimento excluído', `Torre: ${torreAtiva} · Pavimento: ${pavimento}`)
   }
   const handleSaveAtividade = async (nome, cor) => {
-    await saveAtividade(empId, nome, cor)
+    await saveAtividade(empId, nome, cor, torreAtiva)
     setAtividades(prev => { const e=prev.find(a=>a.name===nome); return e?prev.map(a=>a.name===nome?{name:nome,color:cor}:a):[...prev,{name:nome,color:cor}] })
   }
-  const handleDeleteAtividade = async (nome) => { await deleteAtividade(empId, nome); setAtividades(prev=>prev.filter(a=>a.name!==nome)) }
-  const handleSaveJunta = async (nome) => { await saveJunta(empId, nome); setJuntas(prev=>prev.includes(nome)?prev:[...prev,nome]) }
-  const handleDeleteJunta = async (nome) => { await deleteJunta(empId, nome); setJuntas(prev=>prev.filter(j=>j!==nome)) }
+  const handleDeleteAtividade = async (nome) => { await deleteAtividade(empId, nome, torreAtiva); setAtividades(prev=>prev.filter(a=>a.name!==nome)) }
+  const handleSaveJunta = async (nome) => { await saveJunta(empId, nome, torreAtiva); setJuntas(prev=>prev.includes(nome)?prev:[...prev,nome]) }
+  const handleDeleteJunta = async (nome) => { await deleteJunta(empId, nome, torreAtiva); setJuntas(prev=>prev.filter(j=>j!==nome)) }
+  // Troca de torre — recarrega dados específicos da nova torre
+  const handleTorreChange = async (novaTorre) => {
+    setTorreAtiva(novaTorre)
+    const [ativsData, juntasData, plantasMeta] = await Promise.all([
+      getAtividades(empId, novaTorre),
+      getJuntas(empId, novaTorre),
+      getPlantasMeta(empId),
+    ])
+    setAtividades(mapAtividades(ativsData))
+    setJuntas(juntasData.map(j => j.nome))
+    setPlantas(plantasMeta)
+  }
+
+  // Salva lista de torres no Supabase
+  const handleSaveTorres = async (novasTorres) => {
+    setTorres(novasTorres)
+    await saveTorres(empId, novasTorres)
+  }
+
   const handleResetSerial = () => {
     if (registros.length > 0) { alert('Só é possível reiniciar quando não há registros.'); return }
     resetSerialForEmp(empId, () => logAction('Nº de série reiniciado'))
@@ -249,6 +280,9 @@ export default function App() {
             onSaveAtividade={handleSaveAtividade} onDeleteAtividade={handleDeleteAtividade}
             onSaveJunta={handleSaveJunta} onDeleteJunta={handleDeleteJunta}
             empId={empId} usuarios={usuarios} isMobile={isMobile}
+            torres={torres} torreAtiva={torreAtiva}
+            onTorreChange={handleTorreChange}
+            onSaveTorres={handleSaveTorres}
           />
         )}
         {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial} isMobile={isMobile}/>}
