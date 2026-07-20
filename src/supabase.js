@@ -84,7 +84,7 @@ const _cache = { registros: {}, fotos: {}, arquivos: {} }
 
 export const getRegistros = async (empId) => {
   const { data } = await supabase.from('registros')
-    .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,x,y,empreendimento_id,created_at,updated_at')
+    .select('id,serial,atividade,pavimento,junta,responsavel,horario,geo_lat,geo_lng,utm_zone,utm_e,utm_n,drive,coments,x,y,empreendimento_id,torre,created_at,updated_at')
     .eq('empreendimento_id', empId)
     .order('created_at', { ascending: false })
   if (!data) return []
@@ -193,66 +193,94 @@ export const deleteRegistro = async (id) => {
 // ── Plantas ───────────────────────────────────────────────────────
 export const getPlantasMeta = async (empId) => {
   const { data } = await supabase.from('plantas')
-    .select('id,pavimento,nome_arquivo,updated_at')
+    .select('id,pavimento,nome_arquivo,updated_at,torre')
     .eq('empreendimento_id', empId)
   if (!data) return {}
   return data.reduce((acc, row) => {
-    acc[row.pavimento] = { nome: row.nome_arquivo, updated_at: row.updated_at, loaded: false }
+    const key = `${row.torre||'Torre A'}::${row.pavimento}`
+    acc[key] = { nome: row.nome_arquivo, updated_at: row.updated_at, loaded: false, torre: row.torre||'Torre A', pavimento: row.pavimento }
     return acc
   }, {})
 }
-export const getPlantaImagem = async (empId, pavimento) => {
+export const getPlantaImagem = async (empId, pavimento, torre='Torre A') => {
   const { data } = await supabase.from('plantas')
-    .select('imagem').eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
+    .select('imagem').eq('empreendimento_id', empId)
+    .eq('pavimento', pavimento).eq('torre', torre).maybeSingle()
   return data?.imagem || null
 }
-export const savePlanta = async (empId, pavimento, imagem, nome_arquivo) => {
+export const savePlanta = async (empId, pavimento, imagem, nome_arquivo, torre='Torre A') => {
   const { data: existing } = await supabase.from('plantas').select('id')
-    .eq('empreendimento_id', empId).eq('pavimento', pavimento).maybeSingle()
-  const payload = { empreendimento_id: empId, pavimento, imagem, nome_arquivo, updated_at: new Date().toISOString() }
+    .eq('empreendimento_id', empId).eq('pavimento', pavimento).eq('torre', torre).maybeSingle()
+  const payload = { empreendimento_id: empId, pavimento, torre, imagem, nome_arquivo, updated_at: new Date().toISOString() }
   if (existing?.id) {
     await supabase.from('plantas').update(payload).eq('id', existing.id)
   } else {
     await supabase.from('plantas').insert(payload)
   }
 }
-export const deletePlanta = async (empId, pavimento) => {
-  await supabase.from('plantas').delete().eq('empreendimento_id', empId).eq('pavimento', pavimento)
+export const deletePlanta = async (empId, pavimento, torre='Torre A') => {
+  await supabase.from('plantas').delete()
+    .eq('empreendimento_id', empId).eq('pavimento', pavimento).eq('torre', torre)
+}
+
+// ── Torres ───────────────────────────────────────────────────────
+export const getTorres = async (empId) => {
+  const { data } = await supabase.from('torres').select('*')
+    .eq('empreendimento_id', empId).order('ordem', { ascending: true })
+  if (!data || data.length === 0) return ['Torre A']
+  return data.map(t => t.nome)
+}
+export const saveTorres = async (empId, nomes) => {
+  // Delete all and reinsert in order
+  await supabase.from('torres').delete().eq('empreendimento_id', empId)
+  if (nomes.length > 0) {
+    await supabase.from('torres').insert(
+      nomes.map((nome, i) => ({ empreendimento_id: empId, nome, ordem: i }))
+    )
+  }
 }
 
 // ── Atividades ────────────────────────────────────────────────────
-export const getAtividades = async (empId) => {
-  const { data } = await supabase.from('atividades').select('*').eq('empreendimento_id', empId).order('nome')
+export const getAtividades = async (empId, torre=null) => {
+  let q = supabase.from('atividades').select('*').eq('empreendimento_id', empId)
+  if (torre) q = q.eq('torre', torre)
+  const { data } = await q.order('nome')
   return data || []
 }
 export const mapAtividades = (data) => data.map(a => ({ name: a.nome||a.name, color: a.cor||a.color }))
-export const saveAtividade = async (empId, nome, cor) => {
-  const { data: ex } = await supabase.from('atividades').select('id').eq('empreendimento_id', empId).eq('nome', nome).maybeSingle()
+export const saveAtividade = async (empId, nome, cor, torre='Torre A') => {
+  const { data: ex } = await supabase.from('atividades').select('id')
+    .eq('empreendimento_id', empId).eq('nome', nome).eq('torre', torre).maybeSingle()
   if (ex?.id) {
     await supabase.from('atividades').update({ cor }).eq('id', ex.id)
   } else {
-    const { error } = await supabase.from('atividades').insert({ empreendimento_id: empId, nome, cor })
+    const { error } = await supabase.from('atividades').insert({ empreendimento_id: empId, nome, cor, torre })
     if (error && error.code !== '23505') console.error('saveAtividade error:', error.message)
   }
 }
-export const deleteAtividade = async (empId, nome) => {
-  await supabase.from('atividades').delete().eq('empreendimento_id', empId).eq('nome', nome)
+export const deleteAtividade = async (empId, nome, torre='Torre A') => {
+  await supabase.from('atividades').delete()
+    .eq('empreendimento_id', empId).eq('nome', nome).eq('torre', torre)
 }
 
 // ── Juntas ────────────────────────────────────────────────────────
-export const getJuntas = async (empId) => {
-  const { data } = await supabase.from('juntas').select('*').eq('empreendimento_id', empId).order('nome')
+export const getJuntas = async (empId, torre=null) => {
+  let q = supabase.from('juntas').select('*').eq('empreendimento_id', empId)
+  if (torre) q = q.eq('torre', torre)
+  const { data } = await q.order('nome')
   return data || []
 }
-export const saveJunta = async (empId, nome) => {
-  const { data: ex } = await supabase.from('juntas').select('id').eq('empreendimento_id', empId).eq('nome', nome).maybeSingle()
+export const saveJunta = async (empId, nome, torre='Torre A') => {
+  const { data: ex } = await supabase.from('juntas').select('id')
+    .eq('empreendimento_id', empId).eq('nome', nome).eq('torre', torre).maybeSingle()
   if (!ex?.id) {
-    const { error } = await supabase.from('juntas').insert({ empreendimento_id: empId, nome })
+    const { error } = await supabase.from('juntas').insert({ empreendimento_id: empId, nome, torre })
     if (error && error.code !== '23505') console.error('saveJunta error:', error.message)
   }
 }
-export const deleteJunta = async (empId, nome) => {
-  await supabase.from('juntas').delete().eq('empreendimento_id', empId).eq('nome', nome)
+export const deleteJunta = async (empId, nome, torre='Torre A') => {
+  await supabase.from('juntas').delete()
+    .eq('empreendimento_id', empId).eq('nome', nome).eq('torre', torre)
 }
 
 // ── Serial ────────────────────────────────────────────────────────
