@@ -134,7 +134,7 @@ function UserSel({label,value,onChange,usuarios}){
   </div>
 }
 
-function CorteInterno({pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,isMobile}){
+function CorteInterno({pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,isMobile,torreAtiva}){
   const [dragIdx, setDragIdx] = useState(null)
   const [overIdx, setOverIdx] = useState(null)
   const ordered = [...pavimentos].reverse()
@@ -170,7 +170,7 @@ function CorteInterno({pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,i
         const isCob = /cobertura/i.test(pav)
         const isSub = /subsolo/i.test(pav)
         const isTerr = /térreo/i.test(pav)
-        const hasReg = registros.some(r => r.pavimento === pav)
+        const hasReg = registros.some(r => r.pavimento === pav && (r.torre||'Torre A') === (torreAtiva||'Torre A'))
         const w = getW(pav)
         const h = getH(pav)
         const bg = active ? '#B99A54' : isCob ? '#444' : isSub ? '#332e24' : '#252118'
@@ -733,7 +733,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
       <div style={{width:isMobile?110:150,flexShrink:0,background:'#16140f',borderRadius:'10px 0 0 10px',padding:'12px 6px',display:'flex',flexDirection:'column',alignItems:'center'}}>
         <div style={{fontSize:8,color:'#8a8477',letterSpacing:'.15em',textTransform:'uppercase',marginBottom:10,fontFamily:'Inter,sans-serif'}}>PAVIMENTOS</div>
         <div style={{width:'100%',overflowY:'auto',maxHeight:480}}>
-          <CorteInterno pavimentos={pavimentos} setPavimentos={setPavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros} isMobile={isMobile}/>
+          <CorteInterno pavimentos={pavimentos} setPavimentos={setPavimentos} pavAtivo={pavAtivo} setPavAtivo={setPavAtivo} registros={registros} isMobile={isMobile} torreAtiva={torreAtivaLocal}/>
         </div>
         <div style={{marginTop:10,width:'100%',padding:'10px 4px 0',borderTop:'1px solid #2C2C28'}}>
           {addPav
