@@ -507,6 +507,10 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
 }
 
 export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePlanta,pavimentos,setPavimentos,pavAtivo,setPavAtivo,registros,modal,setModal,iconClicked,setIconClicked,juntas,atividades,onSaveRegistro,onDeleteRegistro,onSaveAtividade,onDeleteAtividade,onSaveJunta,onDeleteJunta,empId,usuarios,isMobile,torres,torreAtiva,onTorreChange,onSaveTorres}){
+  // Torres — definido primeiro pois é usado logo abaixo
+  const torresLocal = torres || ['Torre A']
+  const torreAtivaLocal = torreAtiva || 'Torre A'
+
   const canvasRef=useRef()
   const fileRef=useRef()
   const[addPav,setAddPav]=useState(false)
@@ -609,8 +613,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
   const regsAtivos=registros.filter(r=>r.pavimento===pavAtivo&&(r.torre||'Torre A')===torreAtivaLocal)
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
-  const torresLocal = torres || ['Torre A']
-  const torreAtivaLocal = torreAtiva || 'Torre A'
+  // torresLocal and torreAtivaLocal defined above
 
   const addTorre = () => {
     const next = String.fromCharCode(65 + torresLocal.length)
@@ -687,7 +690,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
                     }}>{torre}</span>
               }
               {/* X para fechar — só aparece se hover e tem mais de 1 */}
-              {torres.length > 1 && (
+              {torresLocal.length > 1 && (
                 <button
                   onClick={e=>{e.stopPropagation();removeTorre(torre)}}
                   style={{
