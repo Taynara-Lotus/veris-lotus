@@ -101,9 +101,15 @@ export default function App() {
         ])
         if (obraData) setObra(obraData)
         else setObra({ nome: obraAberta.nome, certificacao: obraAberta.cert||'EDGE', nivel_certificacao: obraAberta.nivel||'', versao_certificacao:'', empreendimento_id: empId })
-        setAtividades(mapAtividades(ativsData))
-        setJuntas(juntasData.map(j => j.nome))
+        const ativsMap = mapAtividades(ativsData)
+        const juntasArr = juntasData.map(j => j.nome)
+        setAtividades(ativsMap)
+        setJuntas(juntasArr)
         setUsuarios(usersData)
+        // Seed cache para a torre inicial
+        if (typeof torreCache !== 'undefined' && torreCache.current) {
+          torreCache.current[torreInicial] = { atividades: ativsMap, juntas: juntasArr }
+        }
         const [regsData, plantasMeta] = await Promise.all([getRegistros(empId), getPlantasMeta(empId)])
         setRegistros(regsData); setPlantas(plantasMeta)
         await initSerial(empId, regsData)
@@ -174,17 +180,28 @@ export default function App() {
   const handleDeleteAtividade = async (nome) => { await deleteAtividade(empId, nome, torreAtiva); setAtividades(prev=>prev.filter(a=>a.name!==nome)) }
   const handleSaveJunta = async (nome) => { await saveJunta(empId, nome, torreAtiva); setJuntas(prev=>prev.includes(nome)?prev:[...prev,nome]) }
   const handleDeleteJunta = async (nome) => { await deleteJunta(empId, nome, torreAtiva); setJuntas(prev=>prev.filter(j=>j!==nome)) }
-  // Troca de torre — recarrega dados específicos da nova torre
+  // Cache de dados por torre para evitar re-queries
+  const torreCache = React.useRef({})
+
   const handleTorreChange = async (novaTorre) => {
     setTorreAtiva(novaTorre)
-    const [ativsData, juntasData, plantasMeta] = await Promise.all([
+    // Se já tem cache, usa imediatamente (sem loading)
+    if (torreCache.current[novaTorre]) {
+      const c = torreCache.current[novaTorre]
+      setAtividades(c.atividades)
+      setJuntas(c.juntas)
+      return
+    }
+    // Caso contrário, carrega em background sem bloquear UI
+    const [ativsData, juntasData] = await Promise.all([
       getAtividades(empId, novaTorre),
       getJuntas(empId, novaTorre),
-      getPlantasMeta(empId),
     ])
-    setAtividades(mapAtividades(ativsData))
-    setJuntas(juntasData.map(j => j.nome))
-    setPlantas(plantasMeta)
+    const atividades = mapAtividades(ativsData)
+    const juntas = juntasData.map(j => j.nome)
+    torreCache.current[novaTorre] = { atividades, juntas }
+    setAtividades(atividades)
+    setJuntas(juntas)
   }
 
   // Salva lista de torres no Supabase
