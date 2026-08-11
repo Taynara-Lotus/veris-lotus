@@ -4,12 +4,13 @@ import {
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
   saveJunta, deleteJunta, getPlantasMeta, getPlantaImagem,
   savePlanta, deletePlanta, getSerialCounter, setSerialCounter,
-  getLogs, addLog
+  getLogs, addLog, getEstrategias
 } from './supabase'
 import DadosObra from './components/DadosObra'
 import PlantaBaixa from './components/PlantaBaixa'
 import GestaoRegistros from './components/GestaoRegistros'
-import Vista3D from './components/Vista3D'
+import EstrategiasCertificacao from './components/EstrategiasCertificacao'
+import Dashboard from './components/Dashboard'
 import TelaInicial from './components/TelaInicial'
 import MemoriaComandos from './components/MemoriaComandos'
 
@@ -76,6 +77,8 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const [logs, setLogs] = useState([])
   const [logsLoaded, setLogsLoaded] = useState(false)
+  const [estrategias, setEstrategias] = useState([])
+  const [estrategiasLoaded, setEstrategiasLoaded] = useState(false)
   // Torres — estado global, persistido no Supabase
   const [torres, setTorres] = useState(['Torre A'])
   const [torreAtiva, setTorreAtiva] = useState('Torre A')
@@ -88,6 +91,7 @@ export default function App() {
       setLoading(true)
       setPavimentos(PAVIMENTOS_DEFAULT); setPlantas({}); setRegistros([])
       setAtividades([]); setJuntas([]); setLogs([]); setLogsLoaded(false); setTab(0)
+      setEstrategias([]); setEstrategiasLoaded(false)
       try {
         const [obraData, torresData, usersData] = await Promise.all([
           getObra(empId), getTorres(empId), getUsuarios()
@@ -119,9 +123,14 @@ export default function App() {
   }, [authed, obraAberta])
 
   useEffect(() => {
-    if (tab !== 4 || logsLoaded || !empId) return
+    if (tab !== 5 || logsLoaded || !empId) return
     getLogs(empId).then(data => { setLogs(data); setLogsLoaded(true) })
   }, [tab, logsLoaded, empId])
+
+  useEffect(() => {
+    if ((tab !== 3 && tab !== 4) || estrategiasLoaded || !empId) return
+    getEstrategias(empId).then(data => { setEstrategias(data); setEstrategiasLoaded(true) })
+  }, [tab, estrategiasLoaded, empId])
 
   useEffect(() => {
     if (tab !== 1 || !empId) return
@@ -215,8 +224,8 @@ export default function App() {
     resetSerialForEmp(empId, () => logAction('Nº de série reiniciado'))
   }
 
-  const TABS = ['Dados da Obra', 'Registros', 'Gestão', 'Vista 3D', 'Memória']
-  const TABS_FULL = ['Dados da Obra', 'Registros', 'Gestão de Registros', 'Vista 3D', 'Memória de Comandos']
+  const TABS = ['Dados da Obra', 'Registros', 'Gestão', 'Estratégias', 'Dashboard', 'Memória']
+  const TABS_FULL = ['Dados da Obra', 'Registros', 'Gestão de Registros', 'Estratégias de Certificação', 'Dashboard', 'Memória de Comandos']
 
   if (!authed || !obraAberta) {
     return (
@@ -303,8 +312,24 @@ export default function App() {
           />
         )}
         {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial} isMobile={isMobile}/>}
-        {tab===3 && <Vista3D registros={registros} pavimentos={pavimentos} atividades={atividades}/>}
-        {tab===4 && <MemoriaComandos logs={logs} currentUser={currentUser} onDeleteLogs={async (indices) => { setLogs(prev => prev.filter((_,i) => !indices.includes(i))) }}/>}
+        {tab===3 && (
+          <EstrategiasCertificacao
+            empId={empId} estrategias={estrategias}
+            setEstrategias={(updater) => {
+              setEstrategias(prev => {
+                const before = prev
+                const next = typeof updater==='function' ? updater(prev) : updater
+                if (next.length > before.length) logAction('Premissa criada', next[next.length-1]?.titulo||'')
+                else if (next.length < before.length) logAction('Premissa excluída')
+                else logAction('Premissa editada')
+                return next
+              })
+            }}
+            obra={obra} usuarios={usuarios} currentUser={currentUser} isMobile={isMobile}
+          />
+        )}
+        {tab===4 && <Dashboard registros={registros} atividades={atividades} estrategias={estrategias} obra={obra} isMobile={isMobile}/>}
+        {tab===5 && <MemoriaComandos logs={logs} currentUser={currentUser} onDeleteLogs={async (indices) => { setLogs(prev => prev.filter((_,i) => !indices.includes(i))) }}/>}
       </div>
     </div>
   )
