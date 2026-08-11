@@ -586,16 +586,25 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         canvas.width=vp.width;canvas.height=vp.height
         await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise
         const pngData=canvas.toDataURL('image/png')
-        setPlantas(prev=>({...prev,[pavAtivo]:{data:pngData,nome:nome.replace('.pdf','.png'),updated_at:ts}}))
+        const nomePng=nome.replace('.pdf','.png')
+        setPlantas(prev=>({...prev,[plantaKey]:{data:pngData,nome:nomePng,updated_at:ts}}))
+        setSaving(true)
+        await onSavePlanta(pavAtivo,pngData,nomePng)
+        setSaving(false)
       }catch(err){
         console.error('PDF convert error:',err)
         alert('Erro ao converter PDF. Tente usar uma imagem (PNG ou JPG) da planta.')
       }
     } else {
       const r=new FileReader()
-      r.onload=ev=>{
-        setPlantas(prev=>({...prev,[pavAtivo]:{data:ev.target.result,nome,updated_at:ts}}))
+      r.onload=async ev=>{
+        const dataUrl=ev.target.result
+        setPlantas(prev=>({...prev,[plantaKey]:{data:dataUrl,nome,updated_at:ts}}))
+        setSaving(true)
+        await onSavePlanta(pavAtivo,dataUrl,nome)
+        setSaving(false)
       }
+      r.onerror=()=>alert(`Não foi possível ler o arquivo "${nome}". Tente novamente.`)
       r.readAsDataURL(f)
     }
   }
@@ -795,7 +804,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
                   setPavimentos(novo)
                   setPavAtivo(novo[Math.max(0,idx-1)]||novo[0])
                   if(onDeletePlanta) onDeletePlanta(pavAtivo)
-                  setPlantas(prev=>{const n={...prev};delete n[pavAtivo];return n})
+                  setPlantas(prev=>{const n={...prev};delete n[plantaKey];return n})
                 }} style={{width:'100%',background:'transparent',border:'1px dashed #6B2020',color:'#C0392B',borderRadius:6,padding:'6px 0',fontSize:11,cursor:'pointer'}}>− Excluir pavimento</button>
               )}
             </div>
@@ -810,6 +819,10 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
             <span style={{fontFamily:"'Playfair Display',serif",fontSize:14,color:'#16140f',fontWeight:500}}>{pavAtivo}</span>
             {plantaNome&&<span style={{marginLeft:10,fontSize:10,color:'#999',fontStyle:'italic'}}>📄 {plantaNome}</span>}
             {plantaUpdatedAt&&<span style={{marginLeft:8,fontSize:9,color:'#bbb'}}>· {fmtDate(plantaUpdatedAt)}</span>}
+            {saving&&<span style={{marginLeft:10,fontSize:10,color:GOLD2,display:'inline-flex',alignItems:'center',gap:4}}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={GOLD2} strokeWidth="2" style={{animation:'spin 1s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              Enviando planta…
+            </span>}
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {planta&&<>
@@ -828,7 +841,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
                 <button onClick={async()=>{
                   if(!window.confirm(`Excluir a planta "${plantaNome||pavAtivo}"?`)) return
                   await onDeletePlanta(pavAtivo)
-                  setPlantas(prev=>{const n={...prev};delete n[pavAtivo];return n})
+                  setPlantas(prev=>{const n={...prev};delete n[plantaKey];return n})
                 }} style={{width:26,height:26,background:'transparent',border:'1px solid #e4dfd0',borderRadius:5,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                   <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#a35c4a' strokeWidth='1.8'><path d='M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13'/></svg>
                 </button>
