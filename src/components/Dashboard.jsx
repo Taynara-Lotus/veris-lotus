@@ -68,7 +68,7 @@ function ProgressRing({segments, size=176, strokeWidth=17, gapDeg=5, centerLabel
     return { ...s, startAngle, endAngle }
   })
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{display:'block',flexShrink:0}}>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={OFF} strokeWidth={strokeWidth}/>
       {arcs.map((a,i) => (
         <path key={i} d={describeArc(cx,cy,r,a.startAngle,a.endAngle)} fill="none"
@@ -80,26 +80,27 @@ function ProgressRing({segments, size=176, strokeWidth=17, gapDeg=5, centerLabel
   )
 }
 
-// ── Pizza simples (sem furo central) ──────────────────────────────
-function PieChart({segments, size=150}){
-  const total = segments.reduce((s,x)=>s+x.value,0) || 1
-  const r = size/2 - 4
+// ── Anéis concêntricos: um anel por categoria (estilo gauge/OKR) ───
+function MultiRingChart({segments, size=170, strokeWidth=13, gap=7}){
   const cx = size/2, cy = size/2
-  let acc = -90
-  const slices = segments.filter(s=>s.value>0).map(s => {
-    const angle = (s.value/total)*360
-    const startAngle = acc
-    const endAngle = acc + angle
-    acc += angle
-    const start = polarToXY(cx,cy,r,startAngle)
-    const end = polarToXY(cx,cy,r,endAngle)
-    const largeArcFlag = angle <= 180 ? '0' : '1'
-    const d = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`
-    return { ...s, d }
-  })
+  const maxR = size/2 - strokeWidth/2 - 2
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      {slices.map((s,i)=><path key={i} d={s.d} fill={s.color} stroke={WHITE} strokeWidth={2}/>)}
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{display:'block',flexShrink:0}}>
+      {segments.map((s,i) => {
+        const r = maxR - i*(strokeWidth+gap)
+        if (r <= strokeWidth/2) return null
+        const c = 2*Math.PI*r
+        const pct = Math.max(0, Math.min(100, s.pct))
+        const dash = (pct/100)*c
+        return (
+          <g key={s.key}>
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke={OFF} strokeWidth={strokeWidth}/>
+            {dash>0 && <circle cx={cx} cy={cy} r={r} fill="none" stroke={s.color} strokeWidth={strokeWidth}
+              strokeDasharray={`${dash} ${c-dash}`} strokeLinecap="round"
+              transform={`rotate(-90 ${cx} ${cy})`}/>}
+          </g>
+        )
+      })}
     </svg>
   )
 }
@@ -208,7 +209,7 @@ function EvolucaoChart({data, width=680, height=220}){
 }
 
 export default function Dashboard({registros, atividades, estrategias, obra, isMobile=false}){
-  const [categoriaView, setCategoriaView] = useState('barras') // 'barras' | 'pizza'
+  const [categoriaView, setCategoriaView] = useState('barras') // 'barras' | 'aneis'
 
   const totalRegistros = registros.length
   const totalFotos = registros.reduce((s,r)=>s+(r.fotos?.length||0),0)
@@ -328,12 +329,12 @@ export default function Dashboard({registros, atividades, estrategias, obra, isM
           }
         </Panel>
 
-        {/* Conclusão por categoria — toggle barras/pizza */}
+        {/* Conclusão por categoria — toggle barras/anéis */}
         <Panel title="Conclusão por Categoria" action={
           porCategoria.length>0 && (
             <div style={{display:'flex',gap:4,background:OFF,borderRadius:6,padding:2}}>
               <button onClick={()=>setCategoriaView('barras')} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:600,padding:'4px 10px',borderRadius:5,background:categoriaView==='barras'?WHITE:'transparent',color:categoriaView==='barras'?JET:'#999',boxShadow:categoriaView==='barras'?'0 1px 3px rgba(0,0,0,.12)':'none',fontFamily:IN}}>Barras</button>
-              <button onClick={()=>setCategoriaView('pizza')} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:600,padding:'4px 10px',borderRadius:5,background:categoriaView==='pizza'?WHITE:'transparent',color:categoriaView==='pizza'?JET:'#999',boxShadow:categoriaView==='pizza'?'0 1px 3px rgba(0,0,0,.12)':'none',fontFamily:IN}}>Pizza</button>
+              <button onClick={()=>setCategoriaView('aneis')} style={{border:'none',cursor:'pointer',fontSize:10,fontWeight:600,padding:'4px 10px',borderRadius:5,background:categoriaView==='aneis'?WHITE:'transparent',color:categoriaView==='aneis'?JET:'#999',boxShadow:categoriaView==='aneis'?'0 1px 3px rgba(0,0,0,.12)':'none',fontFamily:IN}}>Anéis</button>
             </div>
           )
         }>
@@ -344,16 +345,20 @@ export default function Dashboard({registros, atividades, estrategias, obra, isM
                 <Bar key={cat} label={`${cat} (${v.concluido}/${v.total})`} value={v.concluido} max={v.total} color={getCategoryColor(cat)}/>
               ))
               : (
-                <div style={{display:'flex',alignItems:'center',gap:20,flexWrap:'wrap'}}>
-                  <PieChart segments={porCategoria.map(([cat,v])=>({key:cat,value:v.total,color:getCategoryColor(cat)}))}/>
+                <div style={{display:'flex',alignItems:'center',gap:22,flexWrap:'wrap'}}>
+                  <MultiRingChart segments={porCategoria.slice(0,6).map(([cat,v])=>({key:cat,pct:v.total>0?Math.round((v.concluido/v.total)*100):0,color:getCategoryColor(cat)}))}/>
                   <div style={{flex:1,minWidth:150}}>
-                    {porCategoria.map(([cat,v])=>(
-                      <div key={cat} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,marginBottom:6,fontFamily:IN}}>
-                        <div style={{width:9,height:9,borderRadius:'50%',background:getCategoryColor(cat),flexShrink:0}}/>
-                        <span style={{color:'#555',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cat}</span>
-                        <span style={{color:JET,fontWeight:700}}>{v.total}</span>
-                      </div>
-                    ))}
+                    {porCategoria.slice(0,6).map(([cat,v])=>{
+                      const pct = v.total>0 ? Math.round((v.concluido/v.total)*100) : 0
+                      return (
+                        <div key={cat} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,marginBottom:8,fontFamily:IN}}>
+                          <div style={{width:9,height:9,borderRadius:'50%',background:getCategoryColor(cat),flexShrink:0}}/>
+                          <span style={{color:'#555',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cat}</span>
+                          <span style={{color:JET,fontWeight:700}}>{pct}%</span>
+                        </div>
+                      )
+                    })}
+                    {porCategoria.length>6 && <div style={{fontSize:10.5,color:'#BBB',fontFamily:IN}}>+{porCategoria.length-6} categoria(s) não exibida(s) nos anéis</div>}
                   </div>
                 </div>
               )
