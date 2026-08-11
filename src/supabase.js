@@ -143,6 +143,9 @@ export const saveRegistro = async (registro) => {
 
   if (!savedData) return null
 
+  // Rastreia falhas de upload para avisar o usuário (em vez de falhar silenciosamente)
+  const uploadErrors = []
+
   // Salva fotos em paralelo no Storage
   if (fotos !== undefined) {
     await supabase.from('fotos').delete().eq('registro_id', savedData.id)
@@ -151,6 +154,7 @@ export const saveRegistro = async (registro) => {
       if (!url && f.data?.startsWith('data:')) {
         const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${sanitizePath(f.nome||'foto')}`
         url = await uploadToStorage(f.data, f.nome, path) || ''
+        if (!url) uploadErrors.push(f.nome || 'foto')
       }
       return { registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url }
     }))
@@ -170,6 +174,7 @@ export const saveRegistro = async (registro) => {
       if (!arquivo_url && arq.arquivo?.startsWith('data:')) {
         const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${sanitizePath(arq.nomeArq||'arquivo')}`
         arquivo_url = await uploadToStorage(arq.arquivo, arq.nomeArq, path) || ''
+        if (!arquivo_url) uploadErrors.push(arq.nomeArq || 'arquivo')
       }
       return { registro_id: savedData.id, empreendimento_id: empId, tipo: arq.tipo, nome: arq.nome||'', nome_arq: arq.nomeArq||'', status: arq.status||'pendente', arquivo_url }
     }))
@@ -179,7 +184,16 @@ export const saveRegistro = async (registro) => {
     }
   }
 
-  return { ...savedData, fotos: fotos||[], nfs: nfs||[], cats: cats||[] }
+  return { ...savedData, fotos: fotos||[], nfs: nfs||[], cats: cats||[], _uploadErrors: uploadErrors }
+}
+
+// ── Editar apenas o nº de série (sem tocar em fotos/arquivos) ──────
+export const updateRegistroSerial = async (id, serial) => {
+  const { data, error } = await supabase.from('registros')
+    .update({ serial, updated_at: new Date().toISOString() })
+    .eq('id', id).select().single()
+  if (error) { console.error('updateRegistroSerial error:', error.message); return null }
+  return data
 }
 
 export const deleteRegistro = async (id) => {
