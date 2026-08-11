@@ -6,12 +6,12 @@ const JET='#1A1A18',WHITE='#FFFFFF',OFF='#F7F5F0'
 const PF="'Playfair Display',Georgia,serif", IN="Inter,-apple-system,sans-serif"
 
 const STATUS = [
-  { value:'concluido',   label:'Concluído/Atendido',   color:'#2E7D32' },
-  { value:'consultoria', label:'Consultoria Validar',  color:'#8B6F2E' },
-  { value:'pendente',    label:'Pendente',              color:'#C62828' },
-  { value:'nao_aplica',  label:'Não Aplicável',         color:'#888888' },
-  { value:'andamento',   label:'Em Andamento',          color:'#1565C0' },
-  { value:'nao_iniciado',label:'Não Iniciado',          color:'#5D5D57' },
+  { value:'concluido',   label:'Concluído/Atendido',   color:'#8A9A5B' },
+  { value:'consultoria', label:'Consultoria Validar',  color:'#C9A24B' },
+  { value:'pendente',    label:'Pendente',              color:'#C17F68' },
+  { value:'nao_aplica',  label:'Não Aplicável',         color:'#A39C8E' },
+  { value:'andamento',   label:'Em Andamento',          color:'#6E8FA3' },
+  { value:'nao_iniciado',label:'Não Iniciado',          color:'#8C7F6B' },
 ]
 const statusInfo = v => STATUS.find(s=>s.value===v) || STATUS[5]
 
