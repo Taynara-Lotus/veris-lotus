@@ -860,7 +860,7 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
                 </div>
                 :<div style={{height:440,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',color:'#CCC',gap:8,pointerEvents:'none'}}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#CDC9B8" strokeWidth="1"><path d="M9 3L3 6v15l6-3 6 3 6-3V3l-6 3-6-3z"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
-                  <div style={{fontSize:12}}>{plantaObj?.loading?'Carregando planta...':'Clique para adicionar planta'}</div>
+                  <div style={{fontSize:12}}>{plantaObj?.loading?'Carregando planta...':(plantaObj?.failed?'Não foi possível carregar a imagem salva.':'Clique para adicionar planta')}</div>
                 </div>
               }
               {regsAtivos.map(reg=>(
