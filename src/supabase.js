@@ -130,61 +130,73 @@ export const saveRegistro = async (registro) => {
   const empId = rest.empreendimento_id
   const payload = { ...rest }
 
-  let savedData = null
-  if (id) {
-    const { data } = await supabase.from('registros')
-      .update({ ...payload, updated_at: new Date().toISOString() })
-      .eq('id', id).select().single()
-    savedData = data
-  } else {
-    const { data } = await supabase.from('registros').insert(payload).select().single()
-    savedData = data
-  }
-
-  if (!savedData) return null
-
-  // Rastreia falhas de upload para avisar o usuário (em vez de falhar silenciosamente)
-  const uploadErrors = []
-
-  // Salva fotos em paralelo no Storage
-  if (fotos !== undefined) {
-    await supabase.from('fotos').delete().eq('registro_id', savedData.id)
-    const fotosComUrl = await Promise.all((fotos||[]).map(async f => {
-      let url = f.url || ''
-      if (!url && f.data?.startsWith('data:')) {
-        const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${sanitizePath(f.nome||'foto')}`
-        url = await uploadToStorage(f.data, f.nome, path) || ''
-        if (!url) uploadErrors.push(f.nome || 'foto')
-      }
-      return { registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url }
-    }))
-    if (fotosComUrl.length > 0) await supabase.from('fotos').insert(fotosComUrl)
-  }
-
-  // Salva arquivos NFs e Cats no Storage
-  if (nfs !== undefined || cats !== undefined) {
-    await supabase.from('arquivos').delete().eq('registro_id', savedData.id)
-    const allArqs = [
-      ...(nfs||[]).map(n => ({ ...n, tipo: 'nf' })),
-      ...(cats||[]).map(c => ({ ...c, tipo: 'cat' }))
-    ]
-    // Upload de todos os arquivos em paralelo
-    const arqsComUrl = await Promise.all(allArqs.map(async arq => {
-      let arquivo_url = arq.arquivo_url || ''
-      if (!arquivo_url && arq.arquivo?.startsWith('data:')) {
-        const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${sanitizePath(arq.nomeArq||'arquivo')}`
-        arquivo_url = await uploadToStorage(arq.arquivo, arq.nomeArq, path) || ''
-        if (!arquivo_url) uploadErrors.push(arq.nomeArq || 'arquivo')
-      }
-      return { registro_id: savedData.id, empreendimento_id: empId, tipo: arq.tipo, nome: arq.nome||'', nome_arq: arq.nomeArq||'', status: arq.status||'pendente', arquivo_url }
-    }))
-    if (arqsComUrl.length > 0) {
-      const { error } = await supabase.from('arquivos').insert(arqsComUrl)
-      if (error) console.error('saveArquivos error:', error.message)
+  try {
+    let savedData = null
+    if (id) {
+      const { data, error } = await supabase.from('registros')
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single()
+      if (error) { console.error('saveRegistro update error:', error.message); return { _error: `Falha ao atualizar registro: ${error.message}` } }
+      savedData = data
+    } else {
+      const { data, error } = await supabase.from('registros').insert(payload).select().single()
+      if (error) { console.error('saveRegistro insert error:', error.message); return { _error: `Falha ao criar registro: ${error.message}` } }
+      savedData = data
     }
-  }
 
-  return { ...savedData, fotos: fotos||[], nfs: nfs||[], cats: cats||[], _uploadErrors: uploadErrors }
+    if (!savedData) return { _error: 'Não foi possível salvar o registro (sem detalhes do servidor).' }
+
+    // Rastreia falhas de upload/gravação para avisar o usuário (em vez de falhar silenciosamente)
+    const uploadErrors = []
+
+    // Salva fotos em paralelo no Storage
+    if (fotos !== undefined) {
+      const { error: delErr } = await supabase.from('fotos').delete().eq('registro_id', savedData.id)
+      if (delErr) console.error('delete fotos error:', delErr.message)
+      const fotosComUrl = await Promise.all((fotos||[]).map(async f => {
+        let url = f.url || ''
+        if (!url && f.data?.startsWith('data:')) {
+          const path = `${empId}/${savedData.id}/fotos/${Date.now()}_${sanitizePath(f.nome||'foto')}`
+          url = await uploadToStorage(f.data, f.nome, path) || ''
+          if (!url) uploadErrors.push(f.nome || 'foto')
+        }
+        return { registro_id: savedData.id, empreendimento_id: empId, nome: f.nome, url }
+      }))
+      if (fotosComUrl.length > 0) {
+        const { error } = await supabase.from('fotos').insert(fotosComUrl)
+        if (error) { console.error('saveFotos error:', error.message); uploadErrors.push(`fotos (banco: ${error.message})`) }
+      }
+    }
+
+    // Salva arquivos NFs e Cats no Storage
+    if (nfs !== undefined || cats !== undefined) {
+      const { error: delErr } = await supabase.from('arquivos').delete().eq('registro_id', savedData.id)
+      if (delErr) console.error('delete arquivos error:', delErr.message)
+      const allArqs = [
+        ...(nfs||[]).map(n => ({ ...n, tipo: 'nf' })),
+        ...(cats||[]).map(c => ({ ...c, tipo: 'cat' }))
+      ]
+      // Upload de todos os arquivos em paralelo
+      const arqsComUrl = await Promise.all(allArqs.map(async arq => {
+        let arquivo_url = arq.arquivo_url || ''
+        if (!arquivo_url && arq.arquivo?.startsWith('data:')) {
+          const path = `${empId}/${savedData.id}/${arq.tipo}/${Date.now()}_${sanitizePath(arq.nomeArq||'arquivo')}`
+          arquivo_url = await uploadToStorage(arq.arquivo, arq.nomeArq, path) || ''
+          if (!arquivo_url) uploadErrors.push(arq.nomeArq || 'arquivo')
+        }
+        return { registro_id: savedData.id, empreendimento_id: empId, tipo: arq.tipo, nome: arq.nome||'', nome_arq: arq.nomeArq||'', status: arq.status||'pendente', arquivo_url }
+      }))
+      if (arqsComUrl.length > 0) {
+        const { error } = await supabase.from('arquivos').insert(arqsComUrl)
+        if (error) { console.error('saveArquivos error:', error.message); uploadErrors.push(`documentos (banco: ${error.message})`) }
+      }
+    }
+
+    return { ...savedData, fotos: fotos||[], nfs: nfs||[], cats: cats||[], _uploadErrors: uploadErrors }
+  } catch (e) {
+    console.error('saveRegistro exception:', e)
+    return { _error: e?.message || 'Erro inesperado de conexão ao salvar o registro.' }
+  }
 }
 
 // ── Editar apenas o nº de série (sem tocar em fotos/arquivos) ──────
