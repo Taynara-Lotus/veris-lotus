@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 const GOLD='#68541F',BEIGE='#CDC9B8',JET='#1A1A18',WHITE='#FFFFFF',OFF='#F7F5F0'
 
@@ -20,6 +20,49 @@ function statusBadge(status, opts){
   const s=opts.find(x=>x.value===status)
   if(!s) return null
   return <span style={{display:'inline-block',padding:'2px 8px',borderRadius:10,background:s.color+'22',color:s.color,fontSize:10,fontWeight:700,letterSpacing:.4,border:`1px solid ${s.color}44`}}>{s.label}</span>
+}
+
+// ── Nº de série editável: clique vira caixa de texto; clicar fora salva ──
+function EditableSerial({value, onSave, style}){
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value||'')
+  const inputRef = useRef()
+
+  useEffect(() => { if (editing) { inputRef.current?.focus(); inputRef.current?.select() } }, [editing])
+  useEffect(() => { if (!editing) setDraft(value||'') }, [value, editing])
+
+  const commit = () => {
+    setEditing(false)
+    const v = draft.trim()
+    if (v && v !== value) onSave(v)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={e=>setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e=>{
+          if (e.key==='Enter') { e.preventDefault(); commit() }
+          if (e.key==='Escape') { setDraft(value||''); setEditing(false) }
+        }}
+        onClick={e=>e.stopPropagation()}
+        style={{...style, border:`1.5px solid ${GOLD}`, borderRadius:4, padding:'1px 5px',
+          outline:'none', background:WHITE, fontFamily:'inherit', width:90}}
+      />
+    )
+  }
+  return (
+    <span
+      onClick={e=>{ e.stopPropagation(); setEditing(true) }}
+      title="Clique para editar o nº de série"
+      style={{...style, cursor:'text', borderBottom:'1px dashed #c9bd9a'}}
+    >
+      {value||'—'}
+    </span>
+  )
 }
 
 function Confirm({msg,onYes,onNo}){
@@ -174,7 +217,7 @@ function exportExcel(registros) {
   URL.revokeObjectURL(url)
 }
 
-export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial,isMobile=false}){
+export default function GestaoRegistros({registros,atividades,onDeleteRegistro,onResetSerial,onEditSerial,isMobile=false}){
   const[open,setOpen]=useState(null)
   const[search,setSearch]=useState('')
   const[confirmDel,setConfirmDel]=useState(null)
@@ -277,7 +320,7 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:isMobile?10:11,color:'#16140f',fontWeight:600,
                     fontFamily:"Inter,sans-serif",whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
-                    {reg.serial||'—'} <span style={{fontWeight:400,color:'#736d5d'}}>· {reg.atividade||'—'}</span>
+                    <EditableSerial value={reg.serial} onSave={v=>onEditSerial?.(reg.id, v)}/> <span style={{fontWeight:400,color:'#736d5d'}}>· {reg.atividade||'—'}</span>
                   </div>
                   <div style={{fontSize:8,color:'#9a927e',marginTop:2,fontFamily:"Inter,sans-serif"}}>
                     {reg.pavimento||'—'} · {reg.horario||'—'}
@@ -303,7 +346,13 @@ export default function GestaoRegistros({registros,atividades,onDeleteRegistro,o
               {isOpen&&(
                 <div style={{padding:'14px 18px',borderTop:`1px solid ${BEIGE}`,background:'#FEFEFE'}}>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
-                    {[['Nº de Série',reg.serial],['Responsável',reg.responsavel],['Pavimento',reg.pavimento],['Atividade',reg.atividade],['Junta',reg.junta],['Criado em',reg.horario]].map(([k,v])=>v?(
+                    <div>
+                      <div style={{fontSize:10,color:'#AAA',letterSpacing:.8,textTransform:'uppercase'}}>Nº de Série</div>
+                      <div style={{fontSize:13,color:JET,marginTop:2}}>
+                        <EditableSerial value={reg.serial} onSave={v=>onEditSerial?.(reg.id, v)}/>
+                      </div>
+                    </div>
+                    {[['Responsável',reg.responsavel],['Pavimento',reg.pavimento],['Atividade',reg.atividade],['Junta',reg.junta],['Criado em',reg.horario]].map(([k,v])=>v?(
                       <div key={k}>
                         <div style={{fontSize:10,color:'#AAA',letterSpacing:.8,textTransform:'uppercase'}}>{k}</div>
                         <div style={{fontSize:13,color:JET,marginTop:2}}>{v}</div>
