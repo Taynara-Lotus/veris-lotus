@@ -4,7 +4,7 @@ import {
   saveRegistro, deleteRegistro, saveAtividade, deleteAtividade,
   saveJunta, deleteJunta, getPlantasMeta, getPlantaImagem,
   savePlanta, deletePlanta, getSerialCounter, setSerialCounter,
-  getLogs, addLog, getEstrategias
+  getLogs, addLog, getEstrategias, updateRegistroSerial
 } from './supabase'
 import DadosObra from './components/DadosObra'
 import PlantaBaixa from './components/PlantaBaixa'
@@ -161,8 +161,20 @@ export default function App() {
     if (saved) {
       setRegistros(prev => { const i=prev.findIndex(r=>r.id===saved.id); return i>=0?prev.map(r=>r.id===saved.id?saved:r):[saved,...prev] })
       logAction(reg.id?'Registro editado':'Registro criado', `Serial: ${saved.serial} · ${saved.atividade||''}`)
+      if (saved._uploadErrors?.length > 0) {
+        alert(`⚠️ O registro foi salvo, mas ${saved._uploadErrors.length} arquivo(s) não foram enviados ao Storage: ${saved._uploadErrors.join(', ')}.\n\nVerifique sua conexão e tente anexar novamente, ou avise a equipe técnica se o problema persistir.`)
+      }
     }
     setSyncing(false); return saved
+  }
+  const handleEditSerial = async (id, novoSerial) => {
+    setSyncing(true)
+    const saved = await updateRegistroSerial(id, novoSerial)
+    if (saved) {
+      setRegistros(prev => prev.map(r => r.id === id ? { ...r, serial: saved.serial } : r))
+      logAction('Nº de série editado manualmente', `${saved.serial}`)
+    }
+    setSyncing(false)
   }
   const handleDeleteRegistro = async (id) => {
     const reg=registros.find(r=>r.id===id); setSyncing(true)
@@ -311,7 +323,7 @@ export default function App() {
             onSaveTorres={handleSaveTorres}
           />
         )}
-        {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial} isMobile={isMobile}/>}
+        {tab===2 && <GestaoRegistros registros={registros} atividades={atividades} onDeleteRegistro={handleDeleteRegistro} onResetSerial={handleResetSerial} onEditSerial={handleEditSerial} isMobile={isMobile}/>}
         {tab===3 && (
           <EstrategiasCertificacao
             empId={empId} estrategias={estrategias}
