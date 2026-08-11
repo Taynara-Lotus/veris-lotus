@@ -134,15 +134,19 @@ export default function App() {
 
   useEffect(() => {
     if (tab !== 1 || !empId) return
-    Object.entries(plantas).forEach(([pav, info]) => {
-      if (info.nome && !info.data && !info.loading) {
-        setPlantas(prev => ({ ...prev, [pav]: { ...prev[pav], loading: true } }))
-        getPlantaImagem(empId, pav).then(img => {
-          if (img) setPlantas(prev => ({ ...prev, [pav]: { ...prev[pav], data: img, loading: false } }))
+    Object.entries(plantas).forEach(([key, info]) => {
+      if (info.nome && !info.data && !info.loading && !info.failed) {
+        const [torreDaPlanta, pav] = key.includes('::') ? key.split('::') : ['Torre A', key]
+        setPlantas(prev => ({ ...prev, [key]: { ...prev[key], loading: true } }))
+        getPlantaImagem(empId, pav, torreDaPlanta).then(img => {
+          setPlantas(prev => ({ ...prev, [key]: { ...prev[key], data: img || null, loading: false, failed: !img } }))
+        }).catch(e => {
+          console.error('getPlantaImagem error:', e)
+          setPlantas(prev => ({ ...prev, [key]: { ...prev[key], loading: false, failed: true } }))
         })
       }
     })
-  }, [tab, empId])
+  }, [tab, empId, plantas])
 
   const logAction = (acao, detalhe='') => {
     addLog(empId, currentUser?.nome || 'Sistema', acao, detalhe)
