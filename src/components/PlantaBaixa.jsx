@@ -257,6 +257,7 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
   const[coments,setComents]=useState(existing?.coments||[])
   const[drive,setDrive]=useState(existing?.drive||'')
   const[confirmDel,setConfirmDel]=useState(false)
+  const[readingFile,setReadingFile]=useState(null) // chave do slot lendo arquivo ('nf-2', 'cat-0', 'fotos'...)
   // Estado de edição de comentário
   const[editingComent,setEditingComent]=useState(null) // índice do comentário sendo editado
   const serial=existing?.serial||nextSerial(empId)
@@ -272,8 +273,14 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
     },()=>{alert('Não foi possível obter localização.');setGeoLoading(false)})
   }
 
-  const readFile=(f,cb)=>{const r=new FileReader();r.onload=ev=>cb(ev.target.result,f.name);r.readAsDataURL(f);}
-  const addFotos=e=>Array.from(e.target.files).forEach(f=>readFile(f,(d,nm)=>setFotos(prev=>[...prev,{data:d,url:'',nome:nm}])))
+  const readFile=(f,cb,key)=>{
+    if(key) setReadingFile(key)
+    const r=new FileReader()
+    r.onload=ev=>{ cb(ev.target.result,f.name); if(key) setReadingFile(null) }
+    r.onerror=()=>{ alert(`Não foi possível ler o arquivo "${f.name}". Tente novamente ou escolha outro arquivo.`); if(key) setReadingFile(null) }
+    r.readAsDataURL(f)
+  }
+  const addFotos=e=>Array.from(e.target.files).forEach(f=>readFile(f,(d,nm)=>setFotos(prev=>[...prev,{data:d,url:'',nome:nm}]),'fotos'))
   const removeFoto=i=>setFotos(fotos.filter((_,j)=>j!==i))
   const getColor=atv=>atividades.find(a=>(a.name||a)===atv)?.color||GOLD
 
@@ -364,13 +371,18 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
                       🗑 Remover
                     </button>
                   </div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer',display:'block',marginTop:4}}>
+                  :readingFile===`nf-${i}`
+                    ?<div style={{fontSize:12,color:GOLD2,marginTop:4,display:'flex',alignItems:'center',gap:6}}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GOLD2} strokeWidth="2" style={{animation:'spin 1s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                      Lendo arquivo…
+                    </div>
+                    :<label style={{fontSize:12,color:GOLD2,cursor:'pointer',display:'block',marginTop:4}}>
                     📁 Adicionar PDF
                     <input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{
                       const f=e.target.files[0]
                       if(!f) return
                       // Aceita PDF e imagens
-                      readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)))
+                      readFile(f,(d,nm)=>setNfs(nfs.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)),`nf-${i}`)
                     }}/>
                   </label>
                 }
@@ -398,12 +410,17 @@ function MiniGuia({existing,pavAtivo,juntas,atividades,onSaveJunta,onDeleteJunta
                       🗑 Remover
                     </button>
                   </div>
-                  :<label style={{fontSize:12,color:GOLD2,cursor:'pointer',display:'block',marginTop:4}}>
+                  :readingFile===`cat-${i}`
+                    ?<div style={{fontSize:12,color:GOLD2,marginTop:4,display:'flex',alignItems:'center',gap:6}}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={GOLD2} strokeWidth="2" style={{animation:'spin 1s linear infinite'}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                      Lendo arquivo…
+                    </div>
+                    :<label style={{fontSize:12,color:GOLD2,cursor:'pointer',display:'block',marginTop:4}}>
                     📁 Adicionar Arquivo
                     <input type="file" accept=".pdf,image/*" style={{display:'none'}} onChange={e=>{
                       const f=e.target.files[0]
                       if(!f) return
-                      readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)))
+                      readFile(f,(d,nm)=>setCats(cats.map((x,j)=>j===i?{...x,arquivo:d,nomeArq:nm,arquivo_url:''}:x)),`cat-${i}`)
                     }}/>
                   </label>
                 }
@@ -868,8 +885,8 @@ export default function PlantaBaixa({plantas,setPlantas,onSavePlanta,onDeletePla
         </div>
       </div>
 
-      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo,torre:torreAtivaLocal});closeAll();}}/>}
-      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
+      {modal&&<MiniGuia x={modal.x} y={modal.y} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{const saved=await onSaveRegistro({...d,x:modal.x,y:modal.y,pavimento:pavAtivo,torre:torreAtivaLocal});if(saved?.id)closeAll();}}/>}
+      {iconClicked!==null&&<MiniGuia existing={registros.find(r=>r.id===iconClicked)} pavAtivo={pavAtivo} juntas={juntas} atividades={atividades} plantaNome={plantaNome} plantaUpdatedAt={plantaUpdatedAt} onSaveJunta={onSaveJunta} onDeleteJunta={onDeleteJunta} onSaveAtividade={onSaveAtividade} onDeleteAtividade={onDeleteAtividade} registros={registros} empId={empId} usuarios={usuarios||[]} onClose={closeAll} onSave={async d=>{const saved=await onSaveRegistro({...registros.find(r=>r.id===iconClicked),...d});if(saved?.id)closeAll();}} onDelete={async()=>{await onDeleteRegistro(iconClicked);closeAll();}}/>}
       </div>
     </div>
   )
