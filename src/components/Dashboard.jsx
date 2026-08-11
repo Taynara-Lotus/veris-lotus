@@ -166,6 +166,15 @@ function EvolucaoChart({data, width=680, height=220}){
   const peakPt = concluidasPts[peakIdx]
   const peakData = data[peakIdx]
 
+  // Posição da caixa de destaque: sempre dentro dos limites do gráfico,
+  // vira para baixo do ponto quando não há espaço acima (ex: pico no topo/canto)
+  const boxW=116, boxH=38
+  let boxX = peakPt ? peakPt.x - boxW/2 : 0
+  boxX = Math.min(Math.max(boxX, padL), width-padR-boxW)
+  let boxY = peakPt ? peakPt.y - boxH - 12 : 0
+  if (boxY < 2) boxY = (peakPt?.y||0) + 12
+  boxY = Math.min(Math.max(boxY, 2), height-6-boxH)
+
   const fmtShort = (d) => d.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
 
   return (
@@ -185,10 +194,10 @@ function EvolucaoChart({data, width=680, height=220}){
       <path d={smoothPath(concluidasPts)} fill="none" stroke="#8A9A5B" strokeWidth={2.5}/>
       {peakPt && <>
         <circle cx={peakPt.x} cy={peakPt.y} r={4.5} fill="#8A9A5B" stroke={WHITE} strokeWidth={2}/>
-        <g transform={`translate(${Math.min(Math.max(peakPt.x-52,4),width-108)}, ${Math.max(peakPt.y-46,4)})`}>
-          <rect width={108} height={36} rx={7} fill={JET}/>
-          <text x={54} y={14} textAnchor="middle" fontFamily={IN} fontSize={9} fill="#B99A54" letterSpacing={0.4}>{fmtShort(peakData.date)}</text>
-          <text x={54} y={28} textAnchor="middle" fontFamily={PF} fontSize={13} fill={WHITE} fontWeight={700}>{peakData.concluidas} concluídas</text>
+        <g transform={`translate(${boxX}, ${boxY})`}>
+          <rect width={boxW} height={boxH} rx={7} fill={JET}/>
+          <text x={boxW/2} y={15} textAnchor="middle" fontFamily={IN} fontSize={9} fill="#B99A54" letterSpacing={0.4}>{fmtShort(peakData.date)}</text>
+          <text x={boxW/2} y={29} textAnchor="middle" fontFamily={PF} fontSize={13} fill={WHITE} fontWeight={700}>{peakData.concluidas} concluídas</text>
         </g>
       </>}
       {/* eixo x: primeira e última data */}
