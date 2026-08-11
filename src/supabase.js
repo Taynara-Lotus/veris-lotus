@@ -298,6 +298,32 @@ export const setSerialCounter = async (empId, value) => {
   }
 }
 
+// ── Estratégias de Certificação ──────────────────────────────────
+export const getEstrategias = async (empId) => {
+  const { data } = await supabase.from('estrategias')
+    .select('*')
+    .eq('empreendimento_id', empId)
+    .order('ordem', { ascending: true })
+  return data || []
+}
+export const saveEstrategia = async (estrategia) => {
+  const { id, ...rest } = estrategia
+  if (id) {
+    const { data } = await supabase.from('estrategias')
+      .update({ ...rest, updated_at: new Date().toISOString() })
+      .eq('id', id).select().single()
+    return data
+  }
+  const { data } = await supabase.from('estrategias').insert(rest).select().single()
+  return data
+}
+export const deleteEstrategia = async (id) => {
+  await supabase.from('estrategias').delete().eq('id', id)
+}
+export const reorderEstrategias = async (empId, ids) => {
+  await Promise.all(ids.map((id, i) => supabase.from('estrategias').update({ ordem: i }).eq('id', id)))
+}
+
 // ── Usuários ──────────────────────────────────────────────────────
 export const getUsuarios = async () => {
   const { data } = await supabase.from('usuarios')
