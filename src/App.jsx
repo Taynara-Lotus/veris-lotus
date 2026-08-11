@@ -158,12 +158,14 @@ export default function App() {
   const handleSaveRegistro = async (reg) => {
     setSyncing(true)
     const saved = await saveRegistro({ ...reg, empreendimento_id: empId })
-    if (saved) {
+    if (saved?.id) {
       setRegistros(prev => { const i=prev.findIndex(r=>r.id===saved.id); return i>=0?prev.map(r=>r.id===saved.id?saved:r):[saved,...prev] })
       logAction(reg.id?'Registro editado':'Registro criado', `Serial: ${saved.serial} · ${saved.atividade||''}`)
       if (saved._uploadErrors?.length > 0) {
-        alert(`⚠️ O registro foi salvo, mas ${saved._uploadErrors.length} arquivo(s) não foram enviados ao Storage: ${saved._uploadErrors.join(', ')}.\n\nVerifique sua conexão e tente anexar novamente, ou avise a equipe técnica se o problema persistir.`)
+        alert(`⚠️ O registro foi salvo, mas houve problema ao enviar: ${saved._uploadErrors.join(', ')}.\n\nVerifique sua conexão e tente anexar novamente, ou avise a equipe técnica se o problema persistir.`)
       }
+    } else {
+      alert(`❌ Não foi possível salvar o registro.\n\n${saved?._error || 'Erro desconhecido de conexão. Verifique sua internet e tente novamente.'}`)
     }
     setSyncing(false); return saved
   }
