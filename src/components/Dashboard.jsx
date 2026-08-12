@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, Fragment } from 'react'
 import { ESTRATEGIA_STATUS } from './EstrategiasCertificacao'
 
 const GOLD='#68541F',GOLD2='#8B6F2E',BEIGE='#CDC9B8',BEIGE2='#EDE8DF'
@@ -149,7 +149,11 @@ function smoothPath(points){
   return d
 }
 
+// ── Gráfico de linha/área com tooltip interativo ao passar o mouse ─
 function EvolucaoChart({data, width=680, height=220}){
+  const [hover, setHover] = useState(null) // índice do ponto sob o mouse
+  const svgRef = useRef(null)
+
   const padL=8, padR=8, padT=18, padB=26
   const innerW = width-padL-padR, innerH = height-padT-padB
   const maxVal = Math.max(1, ...data.map(d=>d.criadas))
@@ -161,50 +165,165 @@ function EvolucaoChart({data, width=680, height=220}){
   const concluidasPts = data.map((d,i)=>toXY(i,d.concluidas))
   const areaPath = smoothPath(concluidasPts) + ` L ${concluidasPts[concluidasPts.length-1].x} ${padT+innerH} L ${concluidasPts[0].x} ${padT+innerH} Z`
 
-  // ponto de pico das concluídas
-  let peakIdx = 0
-  data.forEach((d,i)=>{ if(d.concluidas > data[peakIdx].concluidas) peakIdx = i })
-  const peakPt = concluidasPts[peakIdx]
-  const peakData = data[peakIdx]
-
-  // Posição da caixa de destaque: sempre dentro dos limites do gráfico,
-  // vira para baixo do ponto quando não há espaço acima (ex: pico no topo/canto)
-  const boxW=116, boxH=38
-  let boxX = peakPt ? peakPt.x - boxW/2 : 0
-  boxX = Math.min(Math.max(boxX, padL), width-padR-boxW)
-  let boxY = peakPt ? peakPt.y - boxH - 12 : 0
-  if (boxY < 2) boxY = (peakPt?.y||0) + 12
-  boxY = Math.min(Math.max(boxY, 2), height-6-boxH)
-
   const fmtShort = (d) => d.toLocaleDateString('pt-BR', { day:'2-digit', month:'short' })
 
+  const handleMove = (e) => {
+    const rect = svgRef.current.getBoundingClientRect()
+    const relX = ((e.clientX - rect.left) / rect.width) * width
+    let closest = 0, minDist = Infinity
+    criadasPts.forEach((p,i)=>{ const d = Math.abs(p.x-relX); if (d<minDist){ minDist=d; closest=i } })
+    setHover(closest)
+  }
+
+  const h = hover!=null ? data[hover] : null
+  const hCriPt = hover!=null ? criadasPts[hover] : null
+  const hConPt = hover!=null ? concluidasPts[hover] : null
+
   return (
-    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="evoGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#8A9A5B" stopOpacity="0.35"/>
-          <stop offset="100%" stopColor="#8A9A5B" stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      {/* linhas guia horizontais */}
-      {[0.25,0.5,0.75,1].map((f,i)=>(
-        <line key={i} x1={padL} x2={width-padR} y1={padT+innerH*(1-f)} y2={padT+innerH*(1-f)} stroke={BEIGE2} strokeWidth={1}/>
-      ))}
-      <path d={areaPath} fill="url(#evoGrad)"/>
-      <path d={smoothPath(criadasPts)} fill="none" stroke={BEIGE} strokeWidth={2} strokeDasharray="4 4"/>
-      <path d={smoothPath(concluidasPts)} fill="none" stroke="#8A9A5B" strokeWidth={2.5}/>
-      {peakPt && <>
-        <circle cx={peakPt.x} cy={peakPt.y} r={4.5} fill="#8A9A5B" stroke={WHITE} strokeWidth={2}/>
-        <g transform={`translate(${boxX}, ${boxY})`}>
-          <rect width={boxW} height={boxH} rx={7} fill={JET}/>
-          <text x={boxW/2} y={15} textAnchor="middle" fontFamily={IN} fontSize={9} fill="#B99A54" letterSpacing={0.4}>{fmtShort(peakData.date)}</text>
-          <text x={boxW/2} y={29} textAnchor="middle" fontFamily={PF} fontSize={13} fill={WHITE} fontWeight={700}>{peakData.concluidas} concluídas</text>
-        </g>
-      </>}
-      {/* eixo x: primeira e última data */}
-      <text x={padL} y={height-6} fontFamily={IN} fontSize={9.5} fill="#AAA">{fmtShort(data[0].date)}</text>
-      <text x={width-padR} y={height-6} textAnchor="end" fontFamily={IN} fontSize={9.5} fill="#AAA">{fmtShort(data[data.length-1].date)}</text>
-    </svg>
+    <div style={{position:'relative', width:'100%'}}>
+      <div style={{width:'100%', aspectRatio:`${width} / ${height}`}}>
+        <svg ref={svgRef} width="100%" height="100%" viewBox={`0 0 ${width} ${height}`}
+          style={{display:'block',cursor:'crosshair'}}
+          onMouseMove={handleMove} onMouseLeave={()=>setHover(null)}>
+          <defs>
+            <linearGradient id="evoGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#8A9A5B" stopOpacity="0.35"/>
+              <stop offset="100%" stopColor="#8A9A5B" stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          {/* linhas guia horizontais */}
+          {[0.25,0.5,0.75,1].map((f,i)=>(
+            <line key={i} x1={padL} x2={width-padR} y1={padT+innerH*(1-f)} y2={padT+innerH*(1-f)} stroke={BEIGE2} strokeWidth={1}/>
+          ))}
+          <path d={areaPath} fill="url(#evoGrad)"/>
+          <path d={smoothPath(criadasPts)} fill="none" stroke={BEIGE} strokeWidth={2} strokeDasharray="4 4"/>
+          <path d={smoothPath(concluidasPts)} fill="none" stroke="#8A9A5B" strokeWidth={2.5}/>
+          {hCriPt && hConPt && <>
+            <line x1={hCriPt.x} x2={hCriPt.x} y1={padT} y2={padT+innerH} stroke={GOLD2} strokeWidth={1} strokeDasharray="2 3" opacity={0.6}/>
+            <circle cx={hCriPt.x} cy={hCriPt.y} r={3.5} fill={BEIGE} stroke={WHITE} strokeWidth={1.5}/>
+            <circle cx={hConPt.x} cy={hConPt.y} r={4} fill="#8A9A5B" stroke={WHITE} strokeWidth={1.5}/>
+          </>}
+          {/* eixo x: primeira e última data */}
+          <text x={padL} y={height-6} fontFamily={IN} fontSize={9.5} fill="#AAA">{fmtShort(data[0].date)}</text>
+          <text x={width-padR} y={height-6} textAnchor="end" fontFamily={IN} fontSize={9.5} fill="#AAA">{fmtShort(data[data.length-1].date)}</text>
+        </svg>
+      </div>
+      {h && (
+        <div style={{
+          position:'absolute', pointerEvents:'none',
+          left:`${(hConPt.x/width)*100}%`, top:`${(hConPt.y/height)*100}%`,
+          transform:'translate(-50%,-125%)',
+          background:JET, color:WHITE, borderRadius:6, padding:'5px 9px',
+          fontSize:10.5, fontFamily:IN, whiteSpace:'nowrap', boxShadow:'0 4px 14px rgba(0,0,0,.25)'
+        }}>
+          <span style={{color:'#B99A54',marginRight:6}}>{fmtShort(h.date)}</span>
+          <span style={{fontWeight:700}}>{h.concluidas} concluídas</span>
+          <span style={{color:'#999',marginLeft:6}}>· {h.criadas} criadas</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Matriz de status por categoria ao longo dos meses (heatmap) ────
+const HEATMAP_STATUSES = ['concluido','consultoria','andamento','pendente','nao_iniciado']
+
+function CategoriaStatusHeatmap({estrategias, statusList}){
+  const [hover, setHover] = useState(null) // {cat, monthIdx, x, y}
+
+  const meses = useMemo(()=>{
+    if (estrategias.length===0) return []
+    const datas = estrategias.map(e=>new Date(e.created_at)).filter(d=>!isNaN(d))
+    if (datas.length===0) return []
+    const minDate = new Date(Math.min(...datas))
+    const start = new Date(minDate.getFullYear(), minDate.getMonth(), 1)
+    const now = new Date()
+    const list = []
+    let cursor = new Date(start)
+    while (cursor <= now){
+      list.push(new Date(cursor))
+      cursor = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1)
+    }
+    if (list.length===0) list.push(now)
+    return list.slice(-6) // últimos 6 meses, para manter minimalista
+  }, [estrategias])
+
+  const categorias = useMemo(()=>{
+    const map = {}
+    estrategias.forEach(e=>{ const k=e.categoria||'Sem categoria'; map[k]=(map[k]||0)+1 })
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]).map(([k])=>k).slice(0,6)
+  }, [estrategias])
+
+  const statusMap = Object.fromEntries(statusList.map(s=>[s.value,s]))
+
+  const cellData = (cat, monthDate) => {
+    const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth()+1, 0, 23,59,59)
+    const items = estrategias.filter(e => (e.categoria||'Sem categoria')===cat && new Date(e.created_at) <= monthEnd)
+    const counts = {}
+    HEATMAP_STATUSES.forEach(s=>counts[s]=0)
+    items.forEach(e => { if (counts[e.status]!==undefined) counts[e.status]++ })
+    return { total: items.length, counts }
+  }
+
+  if (meses.length===0 || categorias.length===0) return <Empty>Sem dados suficientes para a matriz.</Empty>
+
+  return (
+    <div style={{overflowX:'auto'}}>
+      <div style={{display:'grid', gridTemplateColumns:`120px repeat(${meses.length}, 1fr)`, gap:6, minWidth:meses.length*70+120}}>
+        <div/>
+        {meses.map((m,i)=>(
+          <div key={i} style={{fontSize:10,color:'#999',textAlign:'center',fontFamily:IN,textTransform:'capitalize'}}>
+            {m.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'})}
+          </div>
+        ))}
+        {categorias.map(cat => (
+          <Fragment key={cat}>
+            <div style={{fontSize:11.5,color:JET,fontFamily:IN,display:'flex',alignItems:'center',gap:6,paddingRight:6}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:getCategoryColor(cat),flexShrink:0}}/>
+              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{cat}</span>
+            </div>
+            {meses.map((m,mi) => {
+              const { total, counts } = cellData(cat, m)
+              return (
+                <div key={mi}
+                  onMouseEnter={()=>setHover({cat, monthIdx:mi, total, counts, monthLabel:m.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})})}
+                  onMouseLeave={()=>setHover(null)}
+                  style={{height:22, borderRadius:5, overflow:'hidden', display:'flex', background:OFF, cursor:'default',
+                    outline: hover?.cat===cat && hover?.monthIdx===mi ? `1.5px solid ${GOLD2}` : 'none'}}>
+                  {total>0 && HEATMAP_STATUSES.map(s => counts[s]>0 && (
+                    <div key={s} style={{height:'100%', width:`${(counts[s]/total)*100}%`, background:statusMap[s]?.color||GOLD}}/>
+                  ))}
+                </div>
+              )
+            })}
+          </Fragment>
+        ))}
+      </div>
+      {/* legenda */}
+      <div style={{display:'flex',gap:14,flexWrap:'wrap',marginTop:12,fontFamily:IN,fontSize:10.5,color:'#888'}}>
+        {HEATMAP_STATUSES.map(s=>(
+          <span key={s} style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{width:9,height:9,borderRadius:2,background:statusMap[s]?.color,display:'inline-block'}}/>
+            {statusMap[s]?.label}
+          </span>
+        ))}
+      </div>
+      {/* tooltip */}
+      {hover && (
+        <div style={{marginTop:10, background:JET, color:WHITE, borderRadius:8, padding:'10px 14px', fontFamily:IN, fontSize:11.5, display:'inline-block'}}>
+          <div style={{color:'#B99A54', fontSize:10, marginBottom:4, textTransform:'capitalize'}}>{hover.cat} · {hover.monthLabel}</div>
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            {HEATMAP_STATUSES.map(s=> hover.counts[s]>0 && (
+              <span key={s} style={{display:'flex',alignItems:'center',gap:5}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:statusMap[s]?.color,display:'inline-block'}}/>
+                {statusMap[s]?.label}: <b>{hover.counts[s]}</b>
+              </span>
+            ))}
+            {hover.total===0 && <span style={{color:'#999'}}>Nenhuma premissa cadastrada até este mês.</span>}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -379,6 +498,13 @@ export default function Dashboard({registros, atividades, estrategias, obra, isM
               </div>
             </>
           }
+        </Panel>
+      </div>
+
+      {/* Status por categoria ao longo dos meses */}
+      <div style={{marginBottom:16}}>
+        <Panel title="Status das Premissas por Categoria · Últimos Meses">
+          <CategoriaStatusHeatmap estrategias={estrategias} statusList={ESTRATEGIA_STATUS}/>
         </Panel>
       </div>
 
